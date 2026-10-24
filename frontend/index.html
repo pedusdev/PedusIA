@@ -4,20 +4,45 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>PedusIA — Tu asistente de IA</title>
-  <meta name="description" content="PedusIA es tu asistente de inteligencia artificial. Chatea con PedusGPT, el modelo más potente y accesible." />
+  <meta name="description" content="PedusIA es un asistente de inteligencia artificial gratuito para estudiantes: resuelve dudas, explica temas paso a paso, te ayuda con los deberes, la programación y los idiomas." />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <meta name="application-name" content="PedusIA" />
   <meta name="theme-color" content="#F5F5F0" />
   <meta name="color-scheme" content="light dark" />
+  <link rel="canonical" href="__SITE_URL__/" />
+  <!--GOOGLE_SITE_VERIFICATION-->
 
-  <!-- Open Graph / redes sociales -->
+  <!-- Open Graph / redes sociales (WhatsApp, Instagram, X...) -->
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="PedusIA" />
+  <meta property="og:locale" content="es_ES" />
+  <meta property="og:url" content="__SITE_URL__/" />
   <meta property="og:title" content="PedusIA — Tu asistente de IA" />
-  <meta property="og:description" content="PedusIA es tu asistente de inteligencia artificial. Chatea con PedusGPT, el modelo más potente y accesible." />
-  <meta property="og:image" content="/assets/logo.png" />
+  <meta property="og:description" content="PedusIA es un asistente de inteligencia artificial gratuito para estudiantes: resuelve dudas, explica temas paso a paso, te ayuda con los deberes, la programación y los idiomas." />
+  <meta property="og:image" content="__SITE_URL__/assets/logo.png" />
+  <meta property="og:image:alt" content="Logo de PedusIA" />
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="PedusIA — Tu asistente de IA" />
-  <meta name="twitter:description" content="PedusIA es tu asistente de inteligencia artificial. Chatea con PedusGPT, el modelo más potente y accesible." />
-  <meta name="twitter:image" content="/assets/logo.png" />
+  <meta name="twitter:description" content="PedusIA es un asistente de inteligencia artificial gratuito para estudiantes: resuelve dudas, explica temas paso a paso, te ayuda con los deberes, la programación y los idiomas." />
+  <meta name="twitter:image" content="__SITE_URL__/assets/logo.png" />
+
+  <!-- Datos estructurados para Google (no es código ejecutable) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "PedusIA",
+    "alternateName": "PedusGPT",
+    "url": "__SITE_URL__/",
+    "image": "__SITE_URL__/assets/logo.png",
+    "description": "PedusIA es un asistente de inteligencia artificial gratuito para estudiantes: resuelve dudas, explica temas paso a paso, te ayuda con los deberes, la programación y los idiomas.",
+    "applicationCategory": "EducationalApplication",
+    "operatingSystem": "Web",
+    "inLanguage": ["es", "en", "fr", "de", "it", "pt", "ca", "ja", "zh", "ko", "ru", "ar"],
+    "audience": { "@type": "EducationalAudience", "educationalRole": "student" },
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" }
+  }
+  </script>
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="/assets/logo.png" />
@@ -55,6 +80,7 @@
     <div class="auth-card glass fade-in-up">
       <img src="/assets/logo.png" alt="Logo de PedusIA" class="auth-logo logo-breathe" width="64" height="64" />
       <h1 class="auth-title">PedusIA</h1>
+      <p class="auth-tagline" data-i18n="auth_tagline">Tu asistente de IA gratuito para estudiar: resuelve dudas, entiende cualquier tema y haz tus deberes con ayuda.</p>
       <p class="auth-subtitle" data-i18n="auth_subtitle">Inicia sesión para empezar a chatear</p>
 
       <div id="config-warning" class="config-warning" role="alert" hidden data-i18n="not_configured"></div>

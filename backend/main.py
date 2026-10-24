@@ -5,7 +5,10 @@ Sirve la API REST en /api/v1 y el frontend estático desde ../frontend.
 Arranque local:  uvicorn main:app --reload --port 8000
 """
 import asyncio
+import html
 import logging
+import os
+import re
 import time
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -14,7 +17,7 @@ from urllib.parse import urlparse
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -161,9 +164,9 @@ async def validation_error_handler(_request: Request, exc: RequestValidationErro
 async def http_error_handler(request: Request, exc: StarletteHTTPException):
     # Rutas no-API desconocidas: devolver la SPA
     if exc.status_code == 404 and not request.url.path.startswith("/api/"):
-        index = settings.FRONTEND_DIR / "index.html"
-        if index.exists():
-            return FileResponse(index)
+        page = _render_index(request)
+        if page is not None:
+            return page
     messages = {404: "Recurso no encontrado.", 405: "Método no permitido."}
     return JSONResponse(
         status_code=exc.status_code,
@@ -388,6 +391,92 @@ if not settings.IS_PRODUCTION:
 
 for module in (auth, chat, conversations, users, files):
     app.include_router(module.router, prefix=API_PREFIX)
+
+
+# --------------------------------------------------------------------------
+# SEO: página principal con URLs absolutas, robots.txt y sitemap.xml
+# --------------------------------------------------------------------------
+_INDEX_CACHE: dict[str, str] = {}
+_VERIFICATION_RE = re.compile(r"^[A-Za-z0-9_\-]{10,100}$")
+
+
+def _clean_env(name: str) -> str:
+    """Lee una variable de entorno quitando espacios y comillas."""
+    return os.getenv(name, "").strip().strip('"').strip("'").strip()
+
+
+def _site_url(request: Request) -> str:
+    """URL pública de la web, sin barra final.
+
+    Orden: PUBLIC_URL (si la defines) → RENDER_EXTERNAL_URL (Render la pone
+    sola) → la dirección con la que ha llegado la petición.
+    """
+    for name in ("PUBLIC_URL", "RENDER_EXTERNAL_URL"):
+        value = _clean_env(name)
+        if value.startswith(("http://", "https://")):
+            return value.rstrip("/")
+    return str(request.base_url).rstrip("/")
+
+
+def _render_index(request: Request):
+    """Devuelve index.html con la URL pública y la verificación de Google."""
+    index = settings.FRONTEND_DIR / "index.html"
+    if not index.exists():
+        return None
+    site = _site_url(request)
+    verification = _clean_env("GOOGLE_SITE_VERIFICATION")
+    # Si pegan la etiqueta entera de Google, extraemos solo el código
+    match = re.search(r'content="([^"]+)"', verification)
+    if match:
+        verification = match.group(1)
+    cache_key = f"{site}|{verification}|{index.stat().st_mtime}"
+    page = _INDEX_CACHE.get(cache_key)
+    if page is None:
+        page = index.read_text(encoding="utf-8").replace("__SITE_URL__", html.escape(site, quote=True))
+        meta = ""
+        if verification and _VERIFICATION_RE.match(verification):
+            meta = f'<meta name="google-site-verification" content="{verification}" />'
+        page = page.replace("<!--GOOGLE_SITE_VERIFICATION-->", meta)
+        _INDEX_CACHE.clear()
+        _INDEX_CACHE[cache_key] = page
+    return HTMLResponse(page, headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/", include_in_schema=False)
+@app.get("/index.html", include_in_schema=False)
+async def home(request: Request):
+    page = _render_index(request)
+    if page is None:
+        return JSONResponse(status_code=404, content={"error": "http_error", "message": "Recurso no encontrado."})
+    return page
+
+
+@app.get("/robots.txt", include_in_schema=False)
+async def robots_txt(request: Request):
+    site = _site_url(request)
+    body = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /api/\n"
+        "\n"
+        f"Sitemap: {site}/sitemap.xml\n"
+    )
+    return PlainTextResponse(body)
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+async def sitemap_xml(request: Request):
+    site = html.escape(_site_url(request))
+    lastmod = time.strftime("%Y-%m-%d", time.gmtime((settings.FRONTEND_DIR / "index.html").stat().st_mtime)) \
+        if (settings.FRONTEND_DIR / "index.html").exists() else time.strftime("%Y-%m-%d", time.gmtime())
+    body = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"  <url><loc>{site}/</loc><lastmod>{lastmod}</lastmod>"
+        "<changefreq>weekly</changefreq><priority>1.0</priority></url>\n"
+        "</urlset>\n"
+    )
+    return Response(body, media_type="application/xml")
 
 
 @app.get("/favicon.ico", include_in_schema=False)

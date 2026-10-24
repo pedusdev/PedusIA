@@ -177,6 +177,7 @@ textarea.input { height: auto; padding: 10px 12px; resize: vertical; min-height:
 }
 .auth-logo { width: 64px; height: 64px; margin: 0 auto 12px; }
 .auth-title { font-size: 26px; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.02em; }
+.auth-tagline { color: var(--text-primary); margin: 0 0 6px; font-size: 14.5px; line-height: 1.5; font-weight: 500; }
 .auth-subtitle { color: var(--text-secondary); margin: 0 0 22px; font-size: 14px; }
 .auth-form { text-align: start; }
 .auth-footer { margin-top: 18px; display: flex; justify-content: center; }
@@ -716,3 +717,9 @@ textarea.input { height: auto; padding: 10px 12px; resize: vertical; min-height:
 /* Contador de la bio cerca del límite */
 .char-counter.warn { color: var(--warning, #C77700); font-weight: 600; }
 .input.invalid { border-color: var(--error); }
+
+/* Tablas: no partir palabras por la mitad ("Alian / za"). Si la tabla no cabe,
+   .table-wrap permite desplazarla horizontalmente. */
+.markdown th, .markdown td { overflow-wrap: normal; word-break: normal; hyphens: manual; }
+.markdown th { white-space: nowrap; }
+.markdown td:first-child { min-width: 90px; }

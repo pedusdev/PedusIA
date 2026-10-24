@@ -148,6 +148,25 @@ create trigger conversations_updated_at
     execute function public.set_updated_at();
 
 -- ---------------------------------------------------------------------
+-- PERMISOS DE LA DATA API (obligatorio desde 2026)
+-- Supabase ya no da permisos automáticos sobre las tablas nuevas de
+-- "public" (proyectos nuevos desde el 30/05/2026 y todos desde el
+-- 30/10/2026). Sin esto el backend recibe: "permission denied for table".
+-- El backend usa la secret key (rol service_role) para todo; el navegador
+-- nunca lee las tablas directamente, así que anon/authenticated no
+-- necesitan acceso (más seguro).
+-- ---------------------------------------------------------------------
+grant usage on schema public to service_role;
+grant select, insert, update, delete on table
+    public.profiles, public.conversations, public.messages, public.uploaded_files
+    to service_role;
+grant usage, select on all sequences in schema public to service_role;
+
+revoke all on table
+    public.profiles, public.conversations, public.messages, public.uploaded_files
+    from anon, authenticated;
+
+-- ---------------------------------------------------------------------
 -- ROW LEVEL SECURITY
 -- ---------------------------------------------------------------------
 alter table public.profiles enable row level security;

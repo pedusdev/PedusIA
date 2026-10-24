@@ -57,7 +57,7 @@ Antes de tocar nada, conviene entender las piezas. PedusIA usa **5 servicios gra
  │  • Storage: fotos de perfil y archivos      │
  └─────────────────────────────────────────────┘
 
- ⏰ UPTIMEROBOT: visita tu web cada 14 min para que Render no la apague.
+ ⏰ UPTIMEROBOT: visita tu web cada 5 min para que Render no la apague.
  🐙 GITHUB: guarda tu código; Render lo coge de ahí.
 ```
 
@@ -67,7 +67,7 @@ Antes de tocar nada, conviene entender las piezas. PedusIA usa **5 servicios gra
 | **Supabase** | Guarda usuarios, chats y archivos | El archivador del instituto |
 | **Render** | Mantiene tu web encendida en internet | El edificio donde está la clase |
 | **GitHub** | Guarda tu código en la nube | La mochila con tus apuntes |
-| **UptimeRobot** | Visita la web cada 14 min para que no se duerma | El despertador |
+| **UptimeRobot** | Visita la web cada 5 min para que no se duerma | El despertador |
 
 **Lo más importante de la seguridad:** las claves secretas (Groq y la *secret key* de Supabase) **solo** las conoce tu servidor. El navegador del usuario nunca las ve. Por eso PedusIA tiene un backend en Python y no solo una página web.
 
@@ -437,6 +437,9 @@ INFO:     Uvicorn running on http://0.0.0.0:8000
 
 **Comprueba también:** <http://localhost:8000/health> debe mostrar `{"status":"ok","version":"1.0.0"}`.
 
+### 🩺 Página de diagnóstico (si algo no va)
+Con `ENVIRONMENT=development`, abre **<http://localhost:8000/api/v1/diagnostico>**. Comprueba una por una tus claves de Supabase y Groq, si existen las tablas y los buckets, si Google está activado y qué modelo usará cada opción. Si algo falla, te dice la solución. Nunca muestra tus claves, y en Render (producción) está desactivada.
+
 > 📱 **Probar desde el móvil en tu misma wifi:** busca la IP local de tu ordenador (por ejemplo `192.168.1.40`) y abre `http://192.168.1.40:8000` en el móvil. El micrófono no funcionará así porque los navegadores exigen HTTPS; en Render sí funcionará.
 
 ---
@@ -558,7 +561,7 @@ Abre tu web publicada, entra con tu cuenta de owner y repite la prueba rápida d
 
 ## 11. UptimeRobot: que tu web no se duerma
 
-El plan gratuito de Render **apaga tu servicio tras 15 minutos sin visitas**. La siguiente visita tarda unos 50 segundos en despertarlo. Para evitarlo, UptimeRobot visitará tu web cada 14 minutos.
+El plan gratuito de Render **apaga tu servicio tras 15 minutos sin visitas**. La siguiente visita tarda unos 50 segundos en despertarlo. Para evitarlo, UptimeRobot visitará tu web cada 5 minutos.
 
 1. Regístrate en <https://uptimerobot.com>.
 2. Pulsa **+ New monitor** (o *Add New Monitor*).
@@ -566,13 +569,28 @@ El plan gratuito de Render **apaga tu servicio tras 15 minutos sin visitas**. La
    - **Monitor type:** HTTP(s)
    - **Friendly name:** `PedusIA`
    - **URL:** `https://TU-APP.onrender.com/health`
-   - **Monitoring interval:** **14 minutes** (si no aparece exacto, elige el más cercano por debajo de 15)
+   - **Monitoring interval:** **5 minutes** (es el único intervalo del plan gratuito y vale perfectamente: basta con que sea menor de 15 minutos)
 4. Activa las alertas por email si quieres enterarte cuando la web se caiga.
 5. Guarda (*Create monitor*).
 
 **Bonus incluido:** cada vez que UptimeRobot visita `/health`, PedusIA hace (como mucho cada 6 horas) una consulta mínima a Supabase. Así tu proyecto gratuito de Supabase **tampoco se pausa** por inactividad (Supabase pausa los proyectos gratuitos tras una semana sin actividad).
 
 > 💡 **Horas gratis de Render:** el plan gratuito incluye 750 horas al mes, suficiente para tener **un** servicio encendido 24/7. No crees otro servicio gratuito encendido a la vez o te quedarás sin horas antes de fin de mes.
+
+---
+
+## 11 bis. Aparecer en Google
+
+PedusIA ya trae preparado lo técnico: descripción para Google, `robots.txt`, `sitemap.xml`, datos estructurados y vista previa al compartir el enlace.
+
+1. Entra en <https://search.google.com/search-console> → **Añadir propiedad** → **Prefijo de la URL** → `https://TU-APP.onrender.com`.
+2. Elige el método **Etiqueta HTML** y copia el código del `content="..."`.
+3. En Render → tu servicio → **Environment** → añade `GOOGLE_SITE_VERIFICATION` con ese código → **Save Changes** (se vuelve a publicar sola).
+4. Cuando termine, vuelve a Search Console y pulsa **Verificar**.
+5. En **Sitemaps**, escribe `sitemap.xml` y pulsa **Enviar**.
+6. En **Inspección de URLs**, pega tu URL y pulsa **Solicitar indexación**.
+
+Google tarda entre unos días y unas semanas en mostrarla. Buscar "PedusIA" es lo primero que funcionará; palabras genéricas como "IA para estudiar" necesitan visitas y enlaces desde otras webs.
 
 ---
 
@@ -801,6 +819,7 @@ Son aproximados y pueden cambiar; consulta la web de cada servicio.
 | *"Necesitas el Plan MAX"* | Eres usuario normal | Solicita acceso o pide a un admin que te dé MAX |
 | No se suben archivos | Faltan los buckets | Vuelve a ejecutar `schema.sql` y comprueba **Storage** |
 | *"Error al cargar datos"* | No se ha ejecutado `schema.sql`, o la *secret key* es incorrecta | Paso 5.2 y revisa `SUPABASE_SERVICE_KEY` |
+| `permission denied for table profiles` (o error 503 al entrar) | Desde 2026 Supabase ya no da permisos automáticos a las tablas nuevas | Ejecuta de nuevo el `schema.sql` actual, que ya incluye los `grant` necesarios |
 | *"Invalid API key"* o *"Invalid JWT"* en los logs | Clave mal copiada (espacios, cortada) o de otro proyecto | Cópiala de nuevo desde **API Keys** |
 | El micrófono no hace nada | Falta HTTPS o permiso | En Render ya hay HTTPS; acepta el permiso del navegador (icono 🔒 de la barra de direcciones) |
 | La lectura en voz alta suena con acento raro | Tu sistema no tiene esa voz instalada | Instala voces en la configuración de idioma del sistema |
@@ -814,6 +833,9 @@ Son aproximados y pueden cambiar; consulta la web de cada servicio.
 | `ModuleNotFoundError: No module named 'main'` | El *Start Command* debe empezar por `cd backend &&` |
 | *"Deploy failed – health check"* | Mira los logs: casi siempre es una variable mal escrita |
 | La web va bien pero ves cambios antiguos | Ctrl + F5, o comprueba en **Events** que el último deploy terminó |
+
+### Avisos en la consola del navegador que puedes ignorar
+- `Connecting to '...js.map' violates the following Content Security Policy...` o `DevTools failed to load source map`: son los *source maps*, unos archivos que solo pide la consola de desarrollador (F12) para depurar librerías. No afectan a la app. Desde la versión actual ya no aparece.
 
 ### Cómo leer los logs
 - **Local:** en la terminal donde corre `uvicorn`.
@@ -881,7 +903,7 @@ Son aproximados y pueden cambiar; consulta la web de cada servicio.
 - [ ] `https://TU-APP.onrender.com/health` responde `ok`
 - [ ] *Site URL* y *Redirect URLs* de Supabase actualizadas
 - [ ] Origen de Render añadido en Google Cloud
-- [ ] Monitor de UptimeRobot cada 14 minutos
+- [ ] Monitor de UptimeRobot cada 5 minutos
 
 **¡Listo!** 🎉 Comparte tu URL y empieza a invitar a gente.
 

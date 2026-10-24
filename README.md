@@ -9,7 +9,7 @@ Plataforma de chat con IA para estudiantes de 14 a 17 años. Interfaz estilo mac
 | Auth + Base de datos + Archivos | Supabase (email/contraseña + Google, Postgres, Storage) | Plan gratuito |
 | IA | Groq API | Nivel gratuito |
 | Hosting | Render Web Service | Plan gratuito |
-| Mantener despierto | UptimeRobot (ping cada 14 min) | Gratis |
+| Mantener despierto | UptimeRobot (ping cada 5 min) | Gratis |
 
 ---
 
@@ -104,7 +104,7 @@ Abre <http://localhost:8000>. Regístrate con el email que pusiste en `OWNER_EMA
 El plan gratuito de Render apaga el servicio tras 15 min sin tráfico. Para evitarlo:
 
 1. Crea una cuenta en [uptimerobot.com](https://uptimerobot.com).
-2. **Add New Monitor → HTTP(s)** con URL `https://TU-APP.onrender.com/health` e intervalo **14 minutos** (el endpoint también acepta `HEAD`).
+2. **Add New Monitor → HTTP(s)** con URL `https://TU-APP.onrender.com/health` e intervalo **5 minutos** (el del plan gratuito) (el endpoint también acepta `HEAD`).
 
 ---
 
