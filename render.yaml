@@ -1,0 +1,53 @@
+# =====================================================================
+# PedusIA — Blueprint de Render (plan gratuito)
+# Render → New → Blueprint → conecta tu repositorio de GitHub.
+# Las variables marcadas con "sync: false" se rellenan en el panel de Render.
+# =====================================================================
+services:
+  - type: web
+    name: pedusia
+    runtime: python
+    plan: free
+    region: frankfurt
+    branch: main
+    buildCommand: pip install --upgrade pip && pip install -r backend/requirements.txt
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: ENVIRONMENT
+        value: production
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: OWNER_EMAIL
+        sync: false
+      - key: CONTACT_EMAIL
+        sync: false
+      - key: ULTRA_DAILY_LIMIT
+        value: "30"
+      - key: GROQ_MODEL_BASIC
+        value: llama-3.1-8b-instant,openai/gpt-oss-20b
+      - key: GROQ_MODEL_PRO
+        value: llama-3.3-70b-versatile,openai/gpt-oss-120b
+      - key: GROQ_MODEL_ULTRA
+        value: llama-3.1-405b-reasoning,openai/gpt-oss-120b
+      - key: GROQ_MODEL_TITLE
+        value: llama-3.1-8b-instant,openai/gpt-oss-20b
+      - key: GROQ_VISION_MODEL
+        value: qwen/qwen3.8-27b
+      - key: GROQ_STT_MODEL
+        value: whisper-large-v3-turbo
+      - key: GROQ_MAX_TOKENS
+        value: "4096"
+      - key: ENABLE_CSP
+        value: "true"

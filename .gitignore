@@ -1,0 +1,19 @@
+# Secretos: NUNCA subir
+.env
+backend/.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Sistema / editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

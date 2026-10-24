@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>PedusIA — Tu asistente de IA</title>
+  <meta name="description" content="PedusIA es tu asistente de inteligencia artificial. Chatea con PedusGPT, el modelo más potente y accesible." />
+  <meta name="theme-color" content="#F5F5F0" />
+  <meta name="color-scheme" content="light dark" />
+
+  <!-- Open Graph / redes sociales -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="PedusIA" />
+  <meta property="og:title" content="PedusIA — Tu asistente de IA" />
+  <meta property="og:description" content="PedusIA es tu asistente de inteligencia artificial. Chatea con PedusGPT, el modelo más potente y accesible." />
+  <meta property="og:image" content="/assets/logo.png" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="PedusIA — Tu asistente de IA" />
+  <meta name="twitter:description" content="PedusIA es tu asistente de inteligencia artificial. Chatea con PedusGPT, el modelo más potente y accesible." />
+  <meta name="twitter:image" content="/assets/logo.png" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="/assets/logo.png" />
+  <link rel="apple-touch-icon" href="/assets/logo.png" />
+
+  <!-- Tipografía Inter (con fallback a SF Pro / fuentes del sistema) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Tema antes de pintar (evita parpadeo) -->
+  <script src="/js/theme-boot.js"></script>
+
+  <link rel="stylesheet" href="/css/themes.css" />
+  <link rel="stylesheet" href="/css/styles.css" />
+  <link rel="stylesheet" href="/css/animations.css" />
+</head>
+<body>
+  <a class="skip-link" href="#message-input">Saltar al chat</a>
+
+  <!-- Banner sin conexión -->
+  <div id="offline-banner" class="offline-banner" role="status" hidden>
+    <span data-i18n="offline_banner">Sin conexión a internet</span>
+  </div>
+
+  <!-- Pantalla de carga inicial -->
+  <div id="splash" class="splash" aria-hidden="true">
+    <img src="/assets/logo.png" alt="" class="splash-logo logo-breathe" width="72" height="72" />
+  </div>
+
+  <!-- ================================================================
+       AUTENTICACIÓN
+       ================================================================ -->
+  <main id="auth-view" class="auth-view" hidden>
+    <div class="auth-card glass fade-in-up">
+      <img src="/assets/logo.png" alt="Logo de PedusIA" class="auth-logo logo-breathe" width="64" height="64" />
+      <h1 class="auth-title">PedusIA</h1>
+      <p class="auth-subtitle" data-i18n="auth_subtitle">Inicia sesión para empezar a chatear</p>
+
+      <div id="config-warning" class="config-warning" role="alert" hidden data-i18n="not_configured"></div>
+
+      <div class="segmented" role="tablist" aria-label="Autenticación">
+        <span class="segmented-indicator" aria-hidden="true"></span>
+        <button type="button" role="tab" class="segmented-btn active" id="auth-tab-login" data-mode="login" aria-selected="true" data-i18n="auth_login">Iniciar sesión</button>
+        <button type="button" role="tab" class="segmented-btn" id="auth-tab-register" data-mode="register" aria-selected="false" data-i18n="auth_register">Registrarse</button>
+      </div>
+
+      <form id="auth-form" class="auth-form" novalidate>
+        <div class="field" id="field-name" hidden>
+          <input type="text" id="auth-name" autocomplete="name" placeholder=" " maxlength="60" />
+          <label for="auth-name" data-i18n="auth_name">Nombre</label>
+        </div>
+        <div class="field">
+          <input type="email" id="auth-email" autocomplete="email" placeholder=" " required />
+          <label for="auth-email" data-i18n="auth_email">Correo electrónico</label>
+        </div>
+        <div class="field field-password">
+          <input type="password" id="auth-password" autocomplete="current-password" placeholder=" " required minlength="6" />
+          <label for="auth-password" data-i18n="auth_password">Contraseña</label>
+          <button type="button" class="field-action" id="toggle-password" aria-label="Mostrar contraseña" data-icon="eye"></button>
+        </div>
+        <p id="auth-error" class="form-error" role="alert" aria-live="assertive"></p>
+        <button type="submit" id="auth-submit" class="btn btn-primary btn-lg btn-block">
+          <span class="btn-label" data-i18n="auth_submit_login">Entrar</span>
+          <span class="spinner" aria-hidden="true"></span>
+        </button>
+        <button type="button" id="forgot-btn" class="link-btn" data-i18n="auth_forgot">¿Olvidaste tu contraseña?</button>
+      </form>
+
+      <div class="divider"><span data-i18n="auth_or">o</span></div>
+
+      <button type="button" id="google-btn" class="btn btn-google btn-lg btn-block">
+        <span data-icon="google"></span>
+        <span data-i18n="auth_google">Continuar con Google</span>
+      </button>
+
+      <div class="auth-footer">
+        <label class="sr-only" for="auth-lang-select" data-i18n="language">Idioma</label>
+        <select id="auth-lang-select" class="select select-sm"></select>
+      </div>
+    </div>
+  </main>
+
+  <!-- ================================================================
+       CUENTA SUSPENDIDA
+       ================================================================ -->
+  <main id="banned-view" class="auth-view" hidden>
+    <div class="auth-card glass banned-card fade-in-up">
+      <div class="banned-icon" data-icon="lockBig"></div>
+      <h1 class="auth-title" data-i18n="banned_title">Tu cuenta ha sido suspendida</h1>
+      <div class="banned-reason">
+        <strong data-i18n="banned_reason">Motivo</strong>
+        <p id="banned-reason"></p>
+      </div>
+      <p class="muted" data-i18n="banned_contact">Contacta con el equipo de PedusIA si crees que es un error</p>
+      <button type="button" id="banned-logout-btn" class="btn btn-secondary btn-block">
+        <span data-icon="logout"></span><span data-i18n="logout">Cerrar sesión</span>
+      </button>
+    </div>
+  </main>
+
+  <!-- ================================================================
+       APLICACIÓN PRINCIPAL
+       ================================================================ -->
+  <div id="app-view" class="app" hidden>
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar" aria-label="Barra lateral">
+      <div class="sidebar-header">
+        <div class="brand">
+          <img src="/assets/logo.png" alt="" width="28" height="28" class="brand-logo" />
+          <span class="brand-name">PedusIA</span>
+        </div>
+        <button type="button" id="sidebar-collapse-btn" class="icon-btn" data-icon="sidebar" data-i18n-title="toggle_sidebar"></button>
+      </div>
+
+      <button type="button" id="new-chat-btn" class="btn btn-new-chat">
+        <span data-icon="plus"></span>
+        <span data-i18n="new_chat">Nueva conversación</span>
+        <kbd class="kbd">⌃⇧N</kbd>
+      </button>
+
+      <div class="search-box">
+        <span data-icon="search"></span>
+        <input type="search" id="chat-search" data-i18n-placeholder="search_chats" placeholder="Buscar conversaciones" autocomplete="off" />
+      </div>
+
+      <nav id="conversation-list" class="conversation-list" aria-label="Historial de conversaciones"></nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-section-label" data-i18n="model_label">Modelo</div>
+        <div id="model-selector-sidebar" class="model-selector"></div>
+
+        <button type="button" id="plan-btn" class="sidebar-link plan-link">
+          <span data-icon="crown"></span>
+          <span data-i18n="plan_max_btn">Plan MAX</span>
+          <span class="badge badge-gold badge-xs">ULTRA</span>
+        </button>
+        <button type="button" id="admin-btn" class="sidebar-link" hidden>
+          <span data-icon="shield"></span>
+          <span data-i18n="admin">Admin</span>
+        </button>
+
+        <div class="sidebar-user-row">
+          <button type="button" id="user-chip" class="user-chip" data-i18n-title="profile">
+            <span id="sidebar-avatar" class="avatar avatar-sm"></span>
+            <span class="user-chip-text">
+              <span id="sidebar-name" class="user-chip-name"></span>
+              <span id="sidebar-role" class="user-chip-role"></span>
+            </span>
+          </button>
+          <button type="button" id="theme-toggle-btn" class="icon-btn" data-i18n-title="toggle_theme"></button>
+          <button type="button" id="settings-btn" class="icon-btn" data-icon="settings" data-i18n-title="settings"></button>
+        </div>
+      </div>
+    </aside>
+    <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+
+    <!-- Área de chat -->
+    <main class="chat-area" id="chat-area">
+      <header class="chat-header">
+        <button type="button" id="menu-btn" class="icon-btn mobile-only" data-icon="menu" data-i18n-title="menu"></button>
+        <button type="button" id="sidebar-open-btn" class="icon-btn desktop-collapsed-only" data-icon="sidebar" data-i18n-title="toggle_sidebar"></button>
+        <h2 id="chat-title" class="chat-title">PedusIA</h2>
+        <span id="active-model-badge" class="model-badge"></span>
+        <div class="chat-header-actions">
+          <button type="button" id="export-btn" class="icon-btn" data-icon="download" data-i18n-title="export" hidden></button>
+        </div>
+      </header>
+
+      <section id="messages" class="messages" aria-live="polite">
+        <!-- Estado vacío -->
+        <div id="empty-state" class="empty-state">
+          <img src="/assets/logo.png" alt="" class="empty-logo logo-breathe" width="84" height="84" />
+          <h1 id="greeting-text" class="greeting"></h1>
+          <div class="suggestions" id="suggestions">
+            <button type="button" class="suggestion-card" data-prompt="sugg_explain_prompt">
+              <span class="suggestion-icon">📚</span><span data-i18n="sugg_explain">Explícame un concepto</span>
+            </button>
+            <button type="button" class="suggestion-card" data-prompt="sugg_code_prompt">
+              <span class="suggestion-icon">💻</span><span data-i18n="sugg_code">Ayúdame con código</span>
+            </button>
+            <button type="button" class="suggestion-card" data-prompt="sugg_translate_prompt">
+              <span class="suggestion-icon">🌍</span><span data-i18n="sugg_translate">Traduce un texto</span>
+            </button>
+            <button type="button" class="suggestion-card" data-prompt="sugg_creative_prompt">
+              <span class="suggestion-icon">✨</span><span data-i18n="sugg_creative">Escribe algo creativo</span>
+            </button>
+          </div>
+        </div>
+        <div id="message-list" class="message-list"></div>
+      </section>
+
+      <button type="button" id="scroll-bottom-btn" class="scroll-bottom-btn" data-icon="arrowDown" data-i18n-title="scroll_bottom" hidden></button>
+
+      <!-- Compositor -->
+      <footer class="composer-wrap">
+        <div id="edit-bar" class="edit-bar" hidden>
+          <span data-icon="edit"></span>
+          <span data-i18n="editing">Editando mensaje</span>
+          <button type="button" id="cancel-edit-btn" class="link-btn" data-i18n="cancel">Cancelar</button>
+        </div>
+        <div id="attachment-preview" class="attachment-preview" hidden></div>
+
+        <div id="composer" class="composer">
+          <textarea id="message-input" rows="1" data-i18n-placeholder="input_placeholder" placeholder="Escribe un mensaje a PedusGPT..." aria-label="Mensaje"></textarea>
+          <div class="composer-toolbar">
+            <div class="composer-tools">
+              <button type="button" id="attach-btn" class="icon-btn" data-icon="paperclip" data-i18n-title="attach"></button>
+              <input type="file" id="file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/markdown,text/csv,.txt,.md,.csv" hidden />
+              <button type="button" id="mic-btn" class="icon-btn" data-icon="mic" data-i18n-title="mic"></button>
+              <div id="model-selector-inline" class="model-selector model-selector-inline"></div>
+            </div>
+            <button type="button" id="send-btn" class="send-btn" data-icon="send" data-i18n-title="send" disabled></button>
+          </div>
+        </div>
+        <p class="disclaimer" data-i18n="disclaimer">PedusGPT puede cometer errores. Verifica la información importante.</p>
+      </footer>
+
+      <div id="drop-overlay" class="drop-overlay" hidden>
+        <div class="drop-box"><span data-icon="paperclip"></span><span data-i18n="drop_files">Suelta el archivo aquí</span></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ================================================================
+       MODAL: CONFIGURACIÓN (Perfil / Preferencias / Plan)
+       ================================================================ -->
+  <div id="settings-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+    <div class="modal modal-lg">
+      <header class="modal-header">
+        <h2 id="settings-title" data-i18n="settings">Configuración</h2>
+        <button type="button" class="icon-btn" data-close data-icon="x" data-i18n-title="close"></button>
+      </header>
+      <div class="tabs" role="tablist">
+        <button type="button" class="tab active" role="tab" data-tab="profile" data-i18n="tab_profile">Perfil</button>
+        <button type="button" class="tab" role="tab" data-tab="preferences" data-i18n="tab_preferences">Preferencias</button>
+        <button type="button" class="tab" role="tab" data-tab="plan" data-i18n="tab_plan">Tu plan</button>
+      </div>
+      <div class="modal-body">
+        <!-- Perfil -->
+        <section class="tab-panel active" id="tab-profile" role="tabpanel">
+          <div class="profile-head">
+            <div class="avatar-edit">
+              <span id="profile-avatar" class="avatar avatar-xl"></span>
+              <button type="button" id="avatar-change-btn" class="avatar-edit-btn" data-icon="camera" data-i18n-title="change_avatar"></button>
+              <input type="file" id="avatar-input" accept="image/jpeg,image/png,image/gif,image/webp" hidden />
+            </div>
+            <div class="profile-head-info">
+              <div class="profile-head-name" id="profile-head-name"></div>
+              <span id="profile-role-badge" class="role-badge"></span>
+              <div class="muted small" id="profile-member-since"></div>
+            </div>
+          </div>
+          <form id="profile-form" class="form-grid" novalidate>
+            <label class="form-label"><span data-i18n="display_name">Nombre para mostrar</span>
+              <input type="text" id="profile-name" class="input" maxlength="60" required />
+            </label>
+            <label class="form-label"><span data-i18n="auth_email">Correo electrónico</span>
+              <input type="email" id="profile-email" class="input" readonly />
+            </label>
+            <label class="form-label form-full"><span data-i18n="bio">Bio</span>
+              <textarea id="profile-bio" class="input" maxlength="200" rows="3" data-i18n-placeholder="bio_ph"></textarea>
+              <span class="char-counter" id="bio-counter">0/200</span>
+            </label>
+            <label class="form-label"><span data-i18n="interests">Intereses</span>
+              <input type="text" id="profile-interests" class="input" maxlength="200" data-i18n-placeholder="interests_ph" />
+            </label>
+            <label class="form-label"><span data-i18n="fav_animal">Animal favorito</span>
+              <input type="text" id="profile-animal" class="input" maxlength="60" data-i18n-placeholder="fav_animal_ph" />
+            </label>
+            <div class="form-actions form-full">
+              <button type="button" id="logout-btn" class="btn btn-ghost btn-danger-text"><span data-icon="logout"></span><span data-i18n="logout">Cerrar sesión</span></button>
+              <button type="submit" id="profile-save-btn" class="btn btn-primary">
+                <span class="btn-label" data-i18n="save_changes">Guardar cambios</span><span class="spinner" aria-hidden="true"></span>
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <!-- Preferencias -->
+        <section class="tab-panel" id="tab-preferences" role="tabpanel">
+          <div class="pref-list">
+            <label class="pref-row">
+              <span class="pref-label" data-i18n="language">Idioma</span>
+              <select id="pref-language" class="select"></select>
+            </label>
+            <label class="pref-row">
+              <span class="pref-label" data-i18n="theme">Tema</span>
+              <select id="pref-theme" class="select">
+                <option value="light" data-i18n="theme_light">Claro</option>
+                <option value="dark" data-i18n="theme_dark">Oscuro</option>
+                <option value="system" data-i18n="theme_system">Sistema</option>
+              </select>
+            </label>
+            <label class="pref-row">
+              <span class="pref-label" data-i18n="default_model">Modelo por defecto</span>
+              <select id="pref-default-model" class="select"></select>
+            </label>
+          </div>
+          <div class="shortcuts">
+            <div class="shortcut"><kbd class="kbd">Ctrl</kbd>+<kbd class="kbd">Shift</kbd>+<kbd class="kbd">N</kbd><span data-i18n="new_chat">Nueva conversación</span></div>
+            <div class="shortcut"><kbd class="kbd">Ctrl</kbd>+<kbd class="kbd">Shift</kbd>+<kbd class="kbd">S</kbd><span data-i18n="toggle_sidebar">Mostrar/ocultar barra lateral</span></div>
+            <div class="shortcut"><kbd class="kbd">Ctrl</kbd>+<kbd class="kbd">/</kbd><span data-i18n="input_placeholder">Escribe un mensaje</span></div>
+            <div class="shortcut"><kbd class="kbd">Esc</kbd><span data-i18n="close">Cerrar</span></div>
+          </div>
+        </section>
+
+        <!-- Tu plan -->
+        <section class="tab-panel" id="tab-plan" role="tabpanel">
+          <div id="plan-tab-content"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       MODAL: PLAN MAX
+       ================================================================ -->
+  <div id="plan-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Plan MAX" hidden>
+    <div class="modal modal-plan">
+      <button type="button" class="icon-btn modal-close-floating" data-close data-icon="x" data-i18n-title="close"></button>
+      <div id="plan-modal-content"></div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       MODAL: PANEL DE ADMINISTRACIÓN
+       ================================================================ -->
+  <div id="admin-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="admin-title" hidden>
+    <div class="modal modal-xl">
+      <header class="modal-header">
+        <h2 id="admin-title"><span data-icon="shield"></span> <span data-i18n="admin_panel">Panel de administración</span></h2>
+        <div class="modal-header-actions">
+          <button type="button" id="admin-refresh" class="icon-btn" data-icon="refresh" data-i18n-title="refresh"></button>
+          <button type="button" class="icon-btn" data-close data-icon="x" data-i18n-title="close"></button>
+        </div>
+      </header>
+      <div class="modal-body">
+        <div id="admin-stats" class="stats-grid"></div>
+        <div class="admin-filters">
+          <div class="search-box search-box-lg">
+            <span data-icon="search"></span>
+            <input type="search" id="admin-search" data-i18n-placeholder="admin_search" autocomplete="off" />
+          </div>
+          <select id="admin-role-filter" class="select">
+            <option value="" data-i18n="admin_all_roles">Todos los roles</option>
+            <option value="user" data-i18n="role_user">Usuario</option>
+            <option value="max" data-i18n="role_max">MAX</option>
+            <option value="admin" data-i18n="role_admin">Admin</option>
+            <option value="owner" data-i18n="role_owner">Owner</option>
+          </select>
+          <select id="admin-status-filter" class="select">
+            <option value="" data-i18n="admin_all_status">Todos los estados</option>
+            <option value="active" data-i18n="status_active">Activo</option>
+            <option value="banned" data-i18n="status_banned">Baneado</option>
+          </select>
+        </div>
+        <div class="table-container">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th data-i18n="col_user">Usuario</th>
+                <th data-i18n="col_role">Rol</th>
+                <th data-i18n="col_status">Estado</th>
+                <th data-i18n="col_joined">Registro</th>
+                <th data-i18n="col_usage">Uso PRO ULTRA hoy</th>
+                <th data-i18n="col_actions">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="admin-table-body"></tbody>
+          </table>
+        </div>
+        <div id="admin-pagination" class="pagination"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: historial de un usuario (admin) -->
+  <div id="history-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="history-title" hidden>
+    <div class="modal">
+      <header class="modal-header">
+        <h2 id="history-title"></h2>
+        <button type="button" class="icon-btn" data-close data-icon="x" data-i18n-title="close"></button>
+      </header>
+      <div class="modal-body">
+        <p class="muted small" data-i18n="history_privacy">Solo se muestran títulos por privacidad.</p>
+        <ul id="history-list" class="history-list"></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: diálogo genérico (confirmar / pedir texto / aviso) -->
+  <div id="dialog-modal" class="modal-overlay" role="alertdialog" aria-modal="true" aria-labelledby="dialog-title" hidden>
+    <div class="modal modal-sm">
+      <div class="modal-body dialog-body">
+        <div id="dialog-icon" class="dialog-icon" hidden></div>
+        <h2 id="dialog-title" class="dialog-title"></h2>
+        <p id="dialog-text" class="dialog-text"></p>
+        <input type="text" id="dialog-input" class="input" hidden />
+        <div class="dialog-actions">
+          <button type="button" id="dialog-cancel" class="btn btn-secondary" data-i18n="cancel">Cancelar</button>
+          <button type="button" id="dialog-confirm" class="btn btn-primary" data-i18n="confirm">Confirmar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notificaciones -->
+  <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- Librerías (CDN) -->
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.10.0/build/highlight.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+
+  <!-- PedusIA -->
+  <script defer src="/js/icons.js"></script>
+  <script defer src="/js/i18n.js"></script>
+  <script defer src="/js/themes.js"></script>
+  <script defer src="/js/markdown.js"></script>
+  <script defer src="/js/app.js"></script>
+  <script defer src="/js/auth.js"></script>
+  <script defer src="/js/sidebar.js"></script>
+  <script defer src="/js/chat.js"></script>
+  <script defer src="/js/files.js"></script>
+  <script defer src="/js/voice.js"></script>
+  <script defer src="/js/export.js"></script>
+  <script defer src="/js/settings.js"></script>
+  <script defer src="/js/admin.js"></script>
+</body>
+</html>

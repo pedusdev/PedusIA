@@ -1,0 +1,16 @@
+# Servidor web
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.20
+
+# Cliente HTTP asíncrono (Groq + Supabase REST/Auth/Storage)
+httpx==0.28.1
+
+# Configuración
+python-dotenv==1.0.1
+
+# Verificación local opcional de JWT de Supabase (HS256)
+pyjwt[crypto]==2.10.1
+
+# Extracción de texto de PDFs adjuntos
+pypdf==5.1.0
