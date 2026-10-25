@@ -1,5 +1,5 @@
 /* =====================================================================
-   PedusIA — Renderizado de Markdown
+   PedusGPT — Renderizado de Markdown
    Usa marked + DOMPurify + highlight.js (CDN). Si el CDN no carga, usa un
    renderizador propio seguro (todo el texto se escapa antes de formatear).
    ===================================================================== */

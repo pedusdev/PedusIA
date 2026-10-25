@@ -1,5 +1,5 @@
 /* =====================================================================
-   PedusIA — Subida de archivos (clip, arrastrar y soltar, pegar imagen)
+   PedusGPT — Subida de archivos (clip, arrastrar y soltar, pegar imagen)
    Tipos: imágenes (jpg, png, gif, webp), PDF, .txt, .md, .csv — máx. 10 MB
    ===================================================================== */
 

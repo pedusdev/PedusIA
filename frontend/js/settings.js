@@ -1,5 +1,5 @@
 /* =====================================================================
-   PedusIA — Configuración: perfil, preferencias y Plan MAX
+   PedusGPT — Configuración: perfil, preferencias y Plan MAX
    ===================================================================== */
 
 const Settings = {
@@ -235,7 +235,8 @@ const Settings = {
     const card = document.createElement("div");
     card.className = "plan-card plan-card-premium";
     const limit = (App.config && App.config.ultra_daily_limit) || 30;
-    const benefits = [1, 2, 3, 4, 5, 6, 7].map((i) => `<li>${escapeHtml(t(`max_b${i}`, { limit }))}</li>`).join("");
+    const codeLimit = (App.config && App.config.peduscode_daily_limit) || 3;
+    const benefits = [1, 2, 3, 4, 5, 6, 7, 8].map((i) => `<li>${escapeHtml(t(`max_b${i}`, { limit, code_limit: codeLimit }))}</li>`).join("");
     card.innerHTML = `
       <div class="plan-crown">${Icons.crown}</div>
       <h2 class="plan-title">PedusGPT 2 PRO ULTRA <span class="badge badge-gold">MAX</span></h2>
@@ -270,6 +271,21 @@ const Settings = {
       }));
     }
 
+    // Uso de PedusCode (agente de código)
+    const code = profile.code || { used: 0, limit: (App.config && App.config.peduscode_daily_limit) || 3, unlimited: usage.unlimited };
+    if (!code.unlimited && code.limit) {
+      const codePercent = Math.min(100, Math.round((code.used / code.limit) * 100));
+      usageBlock += `
+        <div class="usage-label" style="margin-top:14px"><span>💻 PedusCode</span><strong>${code.used}/${code.limit}</strong></div>
+        <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${code.limit}" aria-valuenow="${code.used}">
+          <div class="progress-bar progress-bar-code${codePercent >= 100 ? " full" : ""}" style="width:0%"></div>
+        </div>`;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const bar = card.querySelector(".progress-bar-code");
+        if (bar) bar.style.width = `${codePercent}%`;
+      }));
+    }
+
     const title = profile.role === "max" ? t("max_have") : t("plan_staff_access", { role: t(`role_${profile.role}`) });
     card.innerHTML = `
       <div class="plan-crown">${Icons.crown}</div>
@@ -279,6 +295,7 @@ const Settings = {
         <span class="perk">👑 PRO ULTRA</span>
         <span class="perk">⚡ ${escapeHtml(t("max_fast"))}</span>
         <span class="perk">💬 ${escapeHtml(t("max_priority"))}</span>
+        <span class="perk">💻 PedusCode</span>
       </div>`;
     return card;
   },

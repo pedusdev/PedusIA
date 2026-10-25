@@ -1,6 +1,6 @@
-# 🐾 PedusIA — Tu asistente de IA
+# 🐾 PedusGPT — Tu asistente de IA
 
-Plataforma de chat con IA para estudiantes de 14 a 17 años. Interfaz estilo macOS, respuestas en streaming, 3 modelos, roles con Plan MAX, panel de administración, 12 idiomas, voz, archivos y exportación. **Todo el stack es gratuito.**
+Plataforma de chat con IA para estudiantes de 14 a 17 años. Interfaz estilo macOS, respuestas en streaming, 3 modelos, roles con Plan MAX, **PedusCode** (agente de programación con 10 IAs), panel de administración, 12 idiomas, voz, archivos y exportación. **Todo el stack es gratuito.**
 
 | Capa | Tecnología | Coste |
 |---|---|---|
@@ -22,15 +22,15 @@ pedusia/
 │   ├── config.py               # Variables de entorno centralizadas
 │   ├── requirements.txt
 │   ├── .env.example            # Plantilla de variables (copiar a .env)
-│   ├── routes/                 # auth, users (perfil + admin), conversations, chat, files
-│   ├── services/               # groq_service, supabase_service, tts_stt_service
+│   ├── routes/                 # auth, users (perfil + admin), conversations, chat, files, code (PedusCode)
+│   ├── services/               # groq_service, supabase_service, tts_stt_service, peduscode_service
 │   ├── middleware/             # auth_middleware (JWT, roles, ban), rate_limiter
 │   └── utils/                  # system_prompts, helpers
 ├── frontend/
 │   ├── index.html
 │   ├── css/                    # styles, themes, animations
 │   ├── js/                     # app, auth, chat, sidebar, settings, themes, markdown,
-│   │                           # files, export, voice, i18n, admin, icons, theme-boot
+│   │                           # files, export, voice, i18n, admin, icons, theme-boot, peduscode
 │   └── assets/logo.png
 ├── supabase/schema.sql         # Tablas, RLS, triggers, funciones y buckets
 ├── render.yaml                 # Blueprint de despliegue en Render
@@ -127,17 +127,22 @@ El plan gratuito de Render apaga el servicio tras 15 min sin tráfico. Para evit
 | `ALLOWED_ORIGINS` | — | Solo si sirves el frontend desde otro dominio |
 | `ENABLE_CSP` | — | Content-Security-Policy (true) |
 | `ENVIRONMENT` | — | `production` o `development` |
+| `PEDUSCODE_DAILY_LIMIT` | — | Ejecuciones diarias de PedusCode para MAX/Admin (3) |
+| `PEDUSCODE_PLANNER_MODELS` / `PEDUSCODE_WORKER_MODELS` | — | Modelos del organizador y de los agentes |
+| `PEDUSCODE_MAX_AGENTS` | — | Agentes además del organizador (9 → 10 llamadas) |
+| `PEDUSCODE_WORKER_MAX_TOKENS` | — | Tokens máximos por agente (4000) |
+| `GROQ_TPM_LIMIT` | — | Tokens por minuto de tu cuenta por modelo (8000 en el plan gratuito) |
 
 ---
 
 ## 👥 Roles y permisos
 
-| Rol | PRO ULTRA | Panel admin | Puede asignar |
-|---|---|---|---|
-| `user` | ❌ (ve el Plan MAX) | ❌ | — |
-| `max` | 30/día | ❌ | — |
-| `admin` | 30/día | ✅ | `user`, `max` |
-| `owner` | Ilimitado | ✅ | `user`, `max`, `admin` |
+| Rol | PRO ULTRA | PedusCode | Panel admin | Puede asignar |
+|---|---|---|---|---|
+| `user` | ❌ (ve el Plan MAX) | ❌ | ❌ | — |
+| `max` | 30/día | 3/día | ❌ | — |
+| `admin` | 30/día | 3/día | ✅ | `user`, `max` |
+| `owner` | Ilimitado | Ilimitado | ✅ | `user`, `max`, `admin` |
 
 - El contador se reinicia cada día a las **00:00 UTC** (de forma perezosa al primer uso del día y con la función `reset_daily_405b_requests()` si quieres programarla con `pg_cron`).
 - Un admin no puede modificar a otros admins ni al owner; nadie puede asignar el rol owner (se define por `OWNER_EMAIL`).
@@ -169,6 +174,8 @@ El plan gratuito de Render apaga el servicio tras 15 min sin tráfico. Para evit
 | PATCH | `/admin/users/{id}/role` · `/ban` · `/reset-limits` | Gestión |
 | GET | `/admin/users/{id}/conversations` | Solo títulos |
 | GET | `/admin/stats` | Estadísticas |
+| GET | `/code/usage` | Uso diario de PedusCode |
+| POST | `/code/run` | Ejecuta PedusCode (SSE: `start`, `planner`, `plan`, `agent`, `file`, `done`, `error`, `refused`) |
 
 Errores siempre en JSON plano, por ejemplo:
 
@@ -196,6 +203,30 @@ Errores siempre en JSON plano, por ejemplo:
 | `Ctrl/Cmd + /` | Ir al cuadro de mensaje |
 | `Esc` | Cerrar modal / cancelar edición |
 | `Enter` / `Shift + Enter` | Enviar / nueva línea |
+| `Ctrl/Cmd + Enter` | Lanzar PedusCode (en el cuadro de la tarea) |
+
+## 💻 PedusCode (agente de código, Plan MAX)
+
+Sección propia en la barra lateral. El usuario elige una carpeta de su ordenador, describe la tarea y un equipo de hasta **10 llamadas a la IA** trabaja a la vez:
+
+1. **Organizador (1 llamada):** lee el árbol del proyecto y los archivos clave, decide cuántos agentes hacen falta (máx. 9), qué archivos crea o edita cada uno y escribe un *contrato* común (nombres de funciones, IDs, rutas) para que todo encaje.
+2. **Agentes (hasta 9 llamadas en paralelo):** cada uno recibe un prompt personalizado con su papel, sus archivos y el contrato, y devuelve los archivos completos.
+3. **Planificador de tokens:** reparte las llamadas entre varios modelos y respeta los tokens por minuto de cada uno (`GROQ_TPM_LIMIT`); si Groq responde 429, espera lo que indica `retry-after` y muestra *«Esperando turno»* en la interfaz.
+4. **Revisión:** el usuario ve las diferencias línea a línea, marca qué guardar y PedusCode escribe **directamente en su carpeta** (File System Access API de Chrome/Edge). Se puede **deshacer**. En otros navegadores o en *Proyecto nuevo* se descarga un ZIP.
+
+**Seguridad de archivos (en el navegador y otra vez en el servidor):**
+
+- Se rechazan carpetas del sistema, discos completos y la carpeta personal entera (`Windows`, `Program Files`, `Users`, `Library`, `/etc`…).
+- Nunca se leen ni se escriben secretos (`.env`, `*.pem`, `*.key`, `id_rsa`, `.npmrc`…), ni `node_modules`, `.git`, `.venv`, `.ssh`…
+- Rutas siempre relativas: sin `..`, sin rutas absolutas, sin nombres reservados de Windows y sin ejecutables (`.exe`, `.dll`, `.msi`, `.vbs`…).
+- Los archivos incompletos o mucho más cortos que el original quedan **desmarcados** por defecto; los scripts (`.sh`, `.bat`, `.ps1`) muestran un aviso.
+- Antes de guardar se comprueba si el archivo cambió desde que se leyó y se pide confirmación.
+- Límites por ejecución: 600 archivos, 120.000 caracteres por archivo y 600.000 en total.
+- Si el organizador falla o rechaza la tarea, **no se gasta** la ejecución del día.
+
+> En el plan gratuito de Groq cada modelo admite unos 8.000 tokens por minuto, así que una ejecución suele tardar **1–3 minutos**. Con el plan Developer sube `GROQ_TPM_LIMIT` y será mucho más rápido.
+
+---
 
 ## 🧩 Notas técnicas
 

@@ -1,5 +1,5 @@
 /* =====================================================================
-   PedusIA — Voz (Web Speech API, gratis y en el navegador)
+   PedusGPT — Voz (Web Speech API, gratis y en el navegador)
    - Speech-to-Text: SpeechRecognition (respaldo: grabación + Whisper vía backend)
    - Text-to-Speech: speechSynthesis
    ===================================================================== */

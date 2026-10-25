@@ -1,5 +1,5 @@
 /* =====================================================================
-   PedusIA — Autenticación (Supabase Auth: email + Google OAuth)
+   PedusGPT — Autenticación (Supabase Auth: email + Google OAuth)
    ===================================================================== */
 
 const Auth = {

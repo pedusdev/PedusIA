@@ -1,4 +1,4 @@
-# 📘 Tutorial completo de PedusIA
+# 📘 Tutorial completo de PedusGPT
 
 ### De cero a tener tu propia IA en internet, gratis y paso a paso
 
@@ -11,21 +11,22 @@
 
 ## 📑 Índice
 
-0. [Cómo funciona PedusIA (en 2 minutos)](#0-cómo-funciona-pedusia-en-2-minutos)
+0. [Cómo funciona PedusGPT (en 2 minutos)](#0-cómo-funciona-pedusgpt-en-2-minutos)
 1. [Lo que necesitas antes de empezar](#1-lo-que-necesitas-antes-de-empezar)
 2. [Descargar el proyecto](#2-descargar-el-proyecto)
 3. [Instalar las herramientas en tu ordenador](#3-instalar-las-herramientas-en-tu-ordenador)
 4. [Groq: la clave de la IA](#4-groq-la-clave-de-la-ia)
 5. [Supabase: usuarios, base de datos y archivos](#5-supabase-usuarios-base-de-datos-y-archivos)
 6. [Login con Google (opcional)](#6-login-con-google-opcional)
-7. [Probar PedusIA en tu ordenador](#7-probar-pedusia-en-tu-ordenador)
+7. [Probar PedusGPT en tu ordenador](#7-probar-pedusgpt-en-tu-ordenador)
 8. [Subir el código a GitHub](#8-subir-el-código-a-github)
 9. [Publicar en internet con Render](#9-publicar-en-internet-con-render)
 10. [Conectar Supabase con tu web publicada](#10-conectar-supabase-con-tu-web-publicada)
 11. [UptimeRobot: que tu web no se duerma](#11-uptimerobot-que-tu-web-no-se-duerma)
 12. [Guía de uso para los usuarios](#12-guía-de-uso-para-los-usuarios)
+    - [12 bis. PedusCode: el agente de programación](#12-bis-peduscode-el-agente-de-programación)
 13. [Guía del administrador (roles, Plan MAX, baneos)](#13-guía-del-administrador)
-14. [Personalizar PedusIA](#14-personalizar-pedusia)
+14. [Personalizar PedusGPT](#14-personalizar-pedusgpt)
 15. [Actualizar la web después de hacer cambios](#15-actualizar-la-web-después-de-hacer-cambios)
 16. [Límites de los planes gratuitos](#16-límites-de-los-planes-gratuitos)
 17. [Solución de problemas](#17-solución-de-problemas)
@@ -35,9 +36,9 @@
 
 ---
 
-## 0. Cómo funciona PedusIA (en 2 minutos)
+## 0. Cómo funciona PedusGPT (en 2 minutos)
 
-Antes de tocar nada, conviene entender las piezas. PedusIA usa **5 servicios gratuitos** que trabajan juntos:
+Antes de tocar nada, conviene entender las piezas. PedusGPT usa **5 servicios gratuitos** que trabajan juntos:
 
 ```
    👤 Usuario (navegador)
@@ -61,7 +62,7 @@ Antes de tocar nada, conviene entender las piezas. PedusIA usa **5 servicios gra
  🐙 GITHUB: guarda tu código; Render lo coge de ahí.
 ```
 
-| Servicio | Qué hace en PedusIA | Analogía |
+| Servicio | Qué hace en PedusGPT | Analogía |
 |---|---|---|
 | **Groq** | Es el "cerebro": la IA que responde | El profesor que contesta |
 | **Supabase** | Guarda usuarios, chats y archivos | El archivador del instituto |
@@ -69,7 +70,7 @@ Antes de tocar nada, conviene entender las piezas. PedusIA usa **5 servicios gra
 | **GitHub** | Guarda tu código en la nube | La mochila con tus apuntes |
 | **UptimeRobot** | Visita la web cada 5 min para que no se duerma | El despertador |
 
-**Lo más importante de la seguridad:** las claves secretas (Groq y la *secret key* de Supabase) **solo** las conoce tu servidor. El navegador del usuario nunca las ve. Por eso PedusIA tiene un backend en Python y no solo una página web.
+**Lo más importante de la seguridad:** las claves secretas (Groq y la *secret key* de Supabase) **solo** las conoce tu servidor. El navegador del usuario nunca las ve. Por eso PedusGPT tiene un backend en Python y no solo una página web.
 
 ---
 
@@ -178,7 +179,7 @@ Groq es quien ejecuta los modelos de IA. Su nivel gratuito es muy generoso.
 4. **Copia la clave** (empieza por `gsk_...`) y guárdala en un bloc de notas temporal.
    > ⚠️ Groq solo te la enseña **una vez**. Si la pierdes, borra esa clave y crea otra.
 
-### ¿Qué modelos usa PedusIA?
+### ¿Qué modelos usa PedusGPT?
 
 | En la app | Primero intenta… | Si no está disponible, usa… |
 |---|---|---|
@@ -187,7 +188,7 @@ Groq es quien ejecuta los modelos de IA. Su nivel gratuito es muy generoso.
 | 👑 PedusGPT 2 PRO ULTRA | `llama-3.1-405b-reasoning` | `openai/gpt-oss-120b` |
 | 🖼️ Imágenes adjuntas | `qwen/qwen3.8-27b` (con visión) | Responde solo con el texto |
 
-**Por qué hay "plan B":** Groq ya no ofrece el modelo de 405B, y en algunas cuentas gratuitas marca los modelos Llama como *Enterprise*. PedusIA lo detecta solo y pasa al siguiente modelo de la lista sin que el usuario note nada. En la práctica, PRO ULTRA funcionará con `gpt-oss-120b`, que es el modelo más potente del nivel gratuito.
+**Por qué hay "plan B":** Groq ya no ofrece el modelo de 405B, y en algunas cuentas gratuitas marca los modelos Llama como *Enterprise*. PedusGPT lo detecta solo y pasa al siguiente modelo de la lista sin que el usuario note nada. En la práctica, PRO ULTRA funcionará con `gpt-oss-120b`, que es el modelo más potente del nivel gratuito.
 
 Puedes ver los modelos disponibles para tu cuenta en <https://console.groq.com/docs/models> y tus límites en **Settings → Limits** dentro de la consola.
 
@@ -243,7 +244,7 @@ Este paso crea toda la estructura de datos de golpe.
    - **Publishable key** → empieza por `sb_publishable_...` (esta es **pública**, puede ir al navegador).
    - **Secret key** → empieza por `sb_secret_...` (pulsa el ojo 👁️ para verla). **Es secretísima.**
 
-> 🧓 **¿Tu proyecto es antiguo?** Si en vez de esas ves claves largas que empiezan por `eyJ...` (llamadas `anon` y `service_role`, en la pestaña *Legacy API Keys*), también funcionan. PedusIA acepta los dos tipos. Aun así, Supabase va a retirar las antiguas a finales de 2026, así que mejor usa las nuevas si las tienes.
+> 🧓 **¿Tu proyecto es antiguo?** Si en vez de esas ves claves largas que empiezan por `eyJ...` (llamadas `anon` y `service_role`, en la pestaña *Legacy API Keys*), también funcionan. PedusGPT acepta los dos tipos. Aun así, Supabase va a retirar las antiguas a finales de 2026, así que mejor usa las nuevas si las tienes.
 
 Apunta en tu bloc de notas:
 ```
@@ -254,7 +255,7 @@ SUPABASE_SERVICE_KEY  = sb_secret_...        (la secret)
 
 > El nombre de la variable sigue siendo `SUPABASE_ANON_KEY` por costumbre, pero ahí va la **publishable**.
 >
-> `SUPABASE_JWT_SECRET` es opcional y **en proyectos nuevos debe quedarse vacío**: PedusIA verifica las sesiones preguntando directamente a Supabase.
+> `SUPABASE_JWT_SECRET` es opcional y **en proyectos nuevos debe quedarse vacío**: PedusGPT verifica las sesiones preguntando directamente a Supabase.
 
 ### 5.4 Configurar el registro por email
 
@@ -262,7 +263,7 @@ Ve a **Authentication → Sign In / Providers** (en algunas versiones, *Provider
 
 - **Enable Email provider:** activado ✅
 - **Confirm email:**
-  - **Activado** (recomendado en producción): el usuario tiene que pulsar un enlace en su correo antes de poder entrar. PedusIA le muestra el mensaje *"Revisa tu correo para confirmar tu cuenta"*.
+  - **Activado** (recomendado en producción): el usuario tiene que pulsar un enlace en su correo antes de poder entrar. PedusGPT le muestra el mensaje *"Revisa tu correo para confirmar tu cuenta"*.
   - **Desactivado** (cómodo para hacer pruebas): se entra al instante.
 
 > ⚠️ **Muy importante:** el servidor de correo que trae Supabase de serie solo envía **muy pocos emails por hora** y está pensado para pruebas. Si vas a tener muchos usuarios, configura un SMTP propio gratuito en **Authentication → Emails → SMTP Settings** (por ejemplo con Brevo o Resend, que tienen plan gratis). Si no, los emails de confirmación y de "olvidé mi contraseña" dejarán de llegar.
@@ -270,7 +271,7 @@ Ve a **Authentication → Sign In / Providers** (en algunas versiones, *Provider
 **Opcional: traducir los emails.** En **Authentication → Emails → Templates** puedes cambiar el texto de los correos de confirmación y recuperación (vienen en inglés). Por ejemplo, en *Confirm signup*:
 
 ```html
-<h2>¡Bienvenido/a a PedusIA! 🐾</h2>
+<h2>¡Bienvenido/a a PedusGPT! 🐾</h2>
 <p>Pulsa el botón para confirmar tu cuenta:</p>
 <p><a href="{{ .ConfirmationURL }}">Confirmar mi cuenta</a></p>
 ```
@@ -291,10 +292,10 @@ Si no quieres el botón "Continuar con Google", salta al paso 7. El botón segui
 
 ### 6.1 Crear la pantalla de consentimiento
 
-1. Entra en <https://console.cloud.google.com> y crea un proyecto nuevo (arriba, selector de proyectos → **New Project** → nombre `PedusIA`).
+1. Entra en <https://console.cloud.google.com> y crea un proyecto nuevo (arriba, selector de proyectos → **New Project** → nombre `PedusGPT`).
 2. Ve a **APIs & Services → OAuth consent screen** (en la interfaz nueva se llama **Google Auth Platform**) y pulsa **Get started**.
 3. Rellena:
-   - **App name:** `PedusIA`
+   - **App name:** `PedusGPT`
    - **User support email:** tu email
    - **Audience:** **External**
    - **Contact information:** tu email
@@ -305,7 +306,7 @@ Si no quieres el botón "Continuar con Google", salta al paso 7. El botón segui
 ### 6.2 Crear las credenciales
 
 1. Ve a **Clients** (o *APIs & Services → Credentials*) → **Create client** → tipo **Web application**.
-2. **Name:** `PedusIA Web`.
+2. **Name:** `PedusGPT Web`.
 3. **Authorized JavaScript origins:**
    - `http://localhost:8000`
    - (más tarde añadirás `https://tu-app.onrender.com`)
@@ -327,7 +328,7 @@ Mientras la app esté en modo **Testing**, solo podrán entrar con Google los em
 
 ---
 
-## 7. Probar PedusIA en tu ordenador
+## 7. Probar PedusGPT en tu ordenador
 
 ### 7.1 Abrir una terminal en la carpeta `backend`
 
@@ -406,7 +407,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 Si todo va bien verás:
 ```
-INFO pedusia: PedusIA 1.0.0 arrancando. Frontend: .../frontend
+INFO pedusia: PedusGPT 1.0.0 arrancando. Frontend: .../frontend
 INFO:     Uvicorn running on http://0.0.0.0:8000
 ```
 
@@ -470,7 +471,7 @@ git status
 4. Continúa:
 
 ```bash
-git commit -m "Primera versión de PedusIA"
+git commit -m "Primera versión de PedusGPT"
 git branch -M main
 git remote add origin https://github.com/TU-USUARIO/pedusia.git
 git push -u origin main
@@ -567,13 +568,13 @@ El plan gratuito de Render **apaga tu servicio tras 15 minutos sin visitas**. La
 2. Pulsa **+ New monitor** (o *Add New Monitor*).
 3. Configura:
    - **Monitor type:** HTTP(s)
-   - **Friendly name:** `PedusIA`
+   - **Friendly name:** `PedusGPT`
    - **URL:** `https://TU-APP.onrender.com/health`
    - **Monitoring interval:** **5 minutes** (es el único intervalo del plan gratuito y vale perfectamente: basta con que sea menor de 15 minutos)
 4. Activa las alertas por email si quieres enterarte cuando la web se caiga.
 5. Guarda (*Create monitor*).
 
-**Bonus incluido:** cada vez que UptimeRobot visita `/health`, PedusIA hace (como mucho cada 6 horas) una consulta mínima a Supabase. Así tu proyecto gratuito de Supabase **tampoco se pausa** por inactividad (Supabase pausa los proyectos gratuitos tras una semana sin actividad).
+**Bonus incluido:** cada vez que UptimeRobot visita `/health`, PedusGPT hace (como mucho cada 6 horas) una consulta mínima a Supabase. Así tu proyecto gratuito de Supabase **tampoco se pausa** por inactividad (Supabase pausa los proyectos gratuitos tras una semana sin actividad).
 
 > 💡 **Horas gratis de Render:** el plan gratuito incluye 750 horas al mes, suficiente para tener **un** servicio encendido 24/7. No crees otro servicio gratuito encendido a la vez o te quedarás sin horas antes de fin de mes.
 
@@ -581,7 +582,7 @@ El plan gratuito de Render **apaga tu servicio tras 15 minutos sin visitas**. La
 
 ## 11 bis. Aparecer en Google
 
-PedusIA ya trae preparado lo técnico: descripción para Google, `robots.txt`, `sitemap.xml`, datos estructurados y vista previa al compartir el enlace.
+PedusGPT ya trae preparado lo técnico: descripción para Google, `robots.txt`, `sitemap.xml`, datos estructurados y vista previa al compartir el enlace.
 
 1. Entra en <https://search.google.com/search-console> → **Añadir propiedad** → **Prefijo de la URL** → `https://TU-APP.onrender.com`.
 2. Elige el método **Etiqueta HTML** y copia el código del `content="..."`.
@@ -590,7 +591,7 @@ PedusIA ya trae preparado lo técnico: descripción para Google, `robots.txt`, `
 5. En **Sitemaps**, escribe `sitemap.xml` y pulsa **Enviar**.
 6. En **Inspección de URLs**, pega tu URL y pulsa **Solicitar indexación**.
 
-Google tarda entre unos días y unas semanas en mostrarla. Buscar "PedusIA" es lo primero que funcionará; palabras genéricas como "IA para estudiar" necesitan visitas y enlaces desde otras webs.
+Google tarda entre unos días y unas semanas en mostrarla. Buscar "PedusGPT" es lo primero que funcionará; palabras genéricas como "IA para estudiar" necesitan visitas y enlaces desde otras webs.
 
 ---
 
@@ -657,6 +658,35 @@ Pulsa tu nombre (abajo a la izquierda):
 
 ---
 
+## 12 bis. PedusCode: el agente de programación
+
+**PedusCode** es un equipo de hasta 10 IAs que programa por ti. Es exclusivo del **Plan MAX** (y de admin/owner): **3 ejecuciones al día** por persona (el owner no tiene límite). Se renuevan a las 00:00 UTC.
+
+### Antes de usarlo por primera vez (solo el dueño de la web)
+
+1. Vuelve a ejecutar **todo** `supabase/schema.sql` en Supabase → **SQL Editor** → *Run*. Es seguro repetirlo: añade las columnas `daily_code_runs` y `last_code_reset` y las funciones `consume_code_run` / `refund_code_run` sin borrar nada. Si no lo haces, PedusCode avisará con *«Falta actualizar la base de datos»*.
+2. No hace falta ninguna variable nueva: los valores por defecto ya funcionan con el plan gratuito de Groq. Si quieres cambiar algo, mira el bloque **PedusCode** de `backend/.env.example` (por ejemplo `PEDUSCODE_DAILY_LIMIT`).
+
+### Cómo se usa
+
+1. En la barra lateral pulsa **💻 PedusCode**.
+2. **Paso 1 — Carpeta:** pulsa **Elegir carpeta** y selecciona la carpeta de tu proyecto (por ejemplo `Documentos/mi-juego`). El navegador te pedirá permiso para **ver y editar** esa carpeta: acéptalo. Si vas a empezar de cero, pulsa **Proyecto nuevo (ZIP)**.
+   - Solo funciona con **Chrome o Edge en un ordenador**. En móvil, Safari o Firefox recibirás los archivos en un ZIP.
+   - Por seguridad, no se aceptan carpetas del sistema (`C:\Windows`, `Program Files`…), discos enteros ni tu carpeta de usuario completa.
+   - Los archivos con contraseñas o claves (`.env`, `.pem`, `id_rsa`…) y carpetas como `node_modules` o `.git` **nunca** se envían a la IA.
+3. **Paso 2 — Tarea:** escribe lo que quieres (o pulsa un ejemplo) y pulsa **Lanzar PedusCode** (o `Ctrl + Enter`).
+4. **Paso 3 — El equipo trabaja:** verás al **organizador** repartiendo el trabajo y una tarjeta por cada agente (🎨 diseño, 🧠 lógica, 📝 documentación…) con su estado: *En cola*, *Esperando turno*, *Escribiendo… N caracteres* y *Listo*. Con el plan gratuito de Groq suele tardar **1–3 minutos**.
+5. **Paso 4 — Revisa y guarda:** aparece la lista de archivos con **Nuevo** o **Modificado** y las líneas añadidas/quitadas. Pulsa un archivo para ver los cambios en verde y rojo. Marca los que quieras y pulsa **Guardar en mi carpeta**: se escriben directamente, sin descargar nada.
+   - ⚠️ *Incompleto* o *Mucho más corto que el original*: vienen **desmarcados**; revísalos antes de guardarlos.
+   - ⚠️ *Script*: revisa los `.sh`, `.bat` o `.ps1` antes de ejecutarlos.
+   - Si mientras tanto has cambiado algún archivo, PedusCode te avisará antes de sobrescribirlo.
+   - **Deshacer** devuelve los archivos a como estaban y borra los que creó PedusCode.
+   - **Descargar ZIP** te da los archivos marcados en un `.zip`.
+
+> 💡 **Consejos:** describe la tarea con detalle («un juego de la serpiente con récord guardado y botón de pausa»), elige la carpeta concreta del proyecto (no `Documentos` entero) y, si el resultado no te convence, pulsa **Nueva tarea** y pide los ajustes.
+
+---
+
 ## 13. Guía del administrador
 
 ### Los roles
@@ -718,7 +748,7 @@ select reset_daily_405b_requests();
 
 ---
 
-## 14. Personalizar PedusIA
+## 14. Personalizar PedusGPT
 
 Después de cada cambio: si estás en local con `--reload`, recarga el navegador; para publicarlo, mira el paso 15.
 
@@ -785,12 +815,13 @@ Son aproximados y pueden cambiar; consulta la web de cada servicio.
 
 | Servicio | Límite gratuito | ¿Qué pasa si lo superas? |
 |---|---|---|
-| **Groq** | Límites por minuto y por día para cada modelo (míralos en *Settings → Limits*) | PedusIA muestra *"Vas demasiado rápido"* y se recupera solo |
+| **Groq** | Límites por minuto y por día para cada modelo (míralos en *Settings → Limits*) | PedusGPT muestra *"Vas demasiado rápido"* y se recupera solo |
 | **Supabase** | 500 MB de base de datos, 1 GB de archivos, 50.000 usuarios activos/mes, 2 proyectos | Te avisa; puedes borrar datos antiguos o pasar a pago |
-| **Supabase** | Se pausa tras 7 días sin actividad | PedusIA lo evita con el ping de `/health` |
+| **Supabase** | Se pausa tras 7 días sin actividad | PedusGPT lo evita con el ping de `/health` |
 | **Supabase (email)** | Muy pocos emails por hora con el servidor de serie | Configura un SMTP gratuito (Brevo, Resend…) |
 | **Render** | 750 h/mes, 512 MB de RAM, se duerme a los 15 min | UptimeRobot lo mantiene despierto |
 | **UptimeRobot** | 50 monitores, intervalo mínimo de 5 min | Te sobra |
+| **Groq (PedusCode)** | ~8.000 tokens por minuto y 200.000 por día en cada modelo | PedusCode espera su turno automáticamente (por eso tarda 1–3 min); si se agota el cupo diario, muestra un error y no gasta la ejecución si el organizador no llegó a trabajar |
 
 **Para cuidar el espacio:** los archivos subidos ocupan Storage. Puedes revisarlos en Supabase → **Storage → uploads** y borrar los antiguos.
 
@@ -814,7 +845,7 @@ Son aproximados y pueden cambiar; consulta la web de cada servicio.
 | Síntoma | Causa | Solución |
 |---|---|---|
 | *"Ups, algo salió mal"* al enviar | Clave de Groq incorrecta o modelo no disponible | Revisa `GROQ_API_KEY`; mira los logs (Render → Logs) |
-| *"Vas demasiado rápido"* | Límite de Groq o de PedusIA | Espera un minuto |
+| *"Vas demasiado rápido"* | Límite de Groq o de PedusGPT | Espera un minuto |
 | *"Has alcanzado tu límite de 30 mensajes…"* | Límite diario de ULTRA | Usa PRO o espera a las 00:00 UTC (o un admin te lo resetea) |
 | *"Necesitas el Plan MAX"* | Eres usuario normal | Solicita acceso o pide a un admin que te dé MAX |
 | No se suben archivos | Faltan los buckets | Vuelve a ejecutar `schema.sql` y comprueba **Storage** |
@@ -824,6 +855,18 @@ Son aproximados y pueden cambiar; consulta la web de cada servicio.
 | El micrófono no hace nada | Falta HTTPS o permiso | En Render ya hay HTTPS; acepta el permiso del navegador (icono 🔒 de la barra de direcciones) |
 | La lectura en voz alta suena con acento raro | Tu sistema no tiene esa voz instalada | Instala voces en la configuración de idioma del sistema |
 | La primera carga tarda casi un minuto | Render estaba dormido | Configura UptimeRobot (paso 11) |
+
+### En PedusCode
+
+| Problema | Solución |
+|---|---|
+| *«Falta actualizar la base de datos»* | Vuelve a ejecutar todo `supabase/schema.sql` en Supabase |
+| No aparece el botón **Elegir carpeta** o sale *«Tu navegador no permite abrir carpetas»* | Usa Chrome o Edge en un ordenador (y la web con `https://`). Mientras tanto, usa **Proyecto nuevo (ZIP)** |
+| *«Carpeta no permitida»* | Has elegido una carpeta del sistema o tu carpeta de usuario entera. Elige la carpeta concreta del proyecto |
+| *«La carpeta tiene demasiados archivos»* | Elige una subcarpeta más concreta (las dependencias como `node_modules` ya se ignoran solas) |
+| Se queda mucho rato en *«Esperando turno»* | Es normal en el plan gratuito de Groq (8.000 tokens/min por modelo). Si pasas al plan Developer, sube `GROQ_TPM_LIMIT` en Render |
+| Un archivo sale como *Incompleto* | El agente se quedó sin espacio. Pide una tarea más pequeña o divide el trabajo en varias ejecuciones |
+| *«Has usado todas tus ejecuciones de hoy»* | Son 3 al día; se renuevan a las 00:00 UTC. El owner puede reiniciar el contador desde el panel de admin (*Resetear límite*) |
 
 ### En Render
 
@@ -850,7 +893,7 @@ Son aproximados y pueden cambiar; consulta la web de cada servicio.
 - 🔒 La **publishable key** sí puede verse en el navegador: es normal y está protegida por las políticas RLS.
 - 🔒 Mantén el repositorio de GitHub **privado** si puedes.
 - 👤 Usa una contraseña fuerte y activa la verificación en dos pasos (2FA) en GitHub, Supabase, Render y Groq.
-- 🧒 **Usuarios menores de edad:** PedusIA está pensada para estudiantes de 14 a 17 años. En España, la edad mínima para dar consentimiento sobre tus propios datos es 14 años. Es muy recomendable publicar una **política de privacidad** sencilla que explique qué datos guardas (email, nombre, conversaciones, archivos), para qué y cómo pedir que se borren. Si la usas en un centro educativo, coordínalo con el centro. (Esto es orientativo, no asesoramiento legal.)
+- 🧒 **Usuarios menores de edad:** PedusGPT está pensado para estudiantes de 14 a 17 años. En España, la edad mínima para dar consentimiento sobre tus propios datos es 14 años. Es muy recomendable publicar una **política de privacidad** sencilla que explique qué datos guardas (email, nombre, conversaciones, archivos), para qué y cómo pedir que se borren. Si la usas en un centro educativo, coordínalo con el centro. (Esto es orientativo, no asesoramiento legal.)
 - 🗑️ Si un usuario pide borrar su cuenta: Supabase → **Authentication → Users** → busca su email → **Delete user**. Su perfil, conversaciones y mensajes se borran en cascada. Sus archivos de Storage no se borran solos: búscalos en **Storage → uploads** y **avatars**, en la carpeta con su ID de usuario.
 - 💾 **Copias de seguridad:** el plan gratuito de Supabase no guarda copias que puedas descargar. Cada cierto tiempo, en **Table Editor** puedes exportar las tablas a CSV.
 
@@ -909,4 +952,4 @@ Son aproximados y pueden cambiar; consulta la web de cada servicio.
 
 ---
 
-<p align="center">Hecho con 💛 para PedusIA · Si algo no funciona, revisa primero la <a href="#17-solución-de-problemas">sección 17</a> y los logs.</p>
+<p align="center">Hecho con 💛 para PedusGPT · Si algo no funciona, revisa primero la <a href="#17-solución-de-problemas">sección 17</a> y los logs.</p>

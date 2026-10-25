@@ -16,7 +16,7 @@ from config import settings
 
 logger = logging.getLogger("pedusia.groq")
 
-# Catálogo público de modelos de PedusIA
+# Catálogo público de modelos de PedusGPT
 MODEL_CATALOG: dict[str, dict] = {
     "pedus-gpt-2": {
         "name": "PedusGPT 2",

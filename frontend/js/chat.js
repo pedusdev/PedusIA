@@ -1,5 +1,5 @@
 /* =====================================================================
-   PedusIA — Chat: selector de modelo, mensajes, streaming SSE y acciones
+   PedusGPT — Chat: selector de modelo, mensajes, streaming SSE y acciones
    ===================================================================== */
 
 const ULTRA_MODEL = "pedus-gpt-2-pro-ultra";
@@ -183,12 +183,13 @@ const Chat = {
     $("#message-list").innerHTML = "";
     this.cancelEdit(false);
     this.showEmpty(true);
-    $("#chat-title").textContent = "PedusIA";
+    $("#chat-title").textContent = "PedusGPT";
     Files.clear();
     Voice.stopSpeaking();
   },
 
   newConversation() {
+    App.showSection("chat");
     this.reset();
     Sidebar.setActive(null);
     if (location.hash) history.replaceState(null, "", location.pathname);
@@ -227,7 +228,7 @@ const Chat = {
     button.innerHTML = streaming ? Icons.stop : Icons.send;
     button.title = t(streaming ? "stop" : "send");
     button.setAttribute("aria-label", button.title);
-    document.title = streaming ? `PedusIA — ${t("writing_title")}` : `PedusIA — ${t("app_tagline")}`;
+    document.title = streaming ? `PedusGPT — ${t("writing_title")}` : `PedusGPT — ${t("app_tagline")}`;
     this.updateSendState();
   },
 
@@ -241,7 +242,11 @@ const Chat = {
   /* Abrir conversaciones                                                */
   /* ------------------------------------------------------------------ */
   async open(id) {
-    if (!id || id === this.currentId) return;
+    App.showSection("chat");
+    if (!id || id === this.currentId) {
+      if (id) { history.replaceState(null, "", `#/c/${id}`); Sidebar.setActive(id); }
+      return;
+    }
     this.reset();
     const token = this.openToken;
     this.currentId = id;

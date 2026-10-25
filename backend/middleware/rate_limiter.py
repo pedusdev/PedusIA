@@ -47,6 +47,7 @@ ip_limiter = SlidingWindowLimiter(limit=240, window=60)       # todas las petici
 chat_limiter = SlidingWindowLimiter(limit=20, window=60)      # mensajes de chat por usuario
 upload_limiter = SlidingWindowLimiter(limit=15, window=60)    # subidas por usuario
 title_limiter = SlidingWindowLimiter(limit=20, window=60)
+code_limiter = SlidingWindowLimiter(limit=3, window=60)       # ejecuciones de PedusCode por usuario
 
 
 def check_limit(limiter: SlidingWindowLimiter, key: str) -> None:
@@ -91,5 +92,50 @@ async def refund_ultra_request(user: CurrentUser) -> None:
         return
     try:
         await supabase.rpc("refund_405b_request", {"p_user_id": user.id})
+    except SupabaseError:
+        pass
+
+
+async def consume_code_run(user: CurrentUser) -> dict:
+    """
+    Reglas de PedusCode:
+    - user  -> 403 (necesita Plan MAX)
+    - owner -> sin límite
+    - max/admin -> máximo PEDUSCODE_DAILY_LIMIT ejecuciones al día (reinicio 00:00 UTC)
+    """
+    limit = settings.PEDUSCODE_DAILY_LIMIT
+    if not user.has_ultra:
+        raise APIError(403, "needs_max", "Necesitas el Plan MAX para usar PedusCode.")
+    if user.is_owner:
+        return {"unlimited": True, "used": 0, "limit": limit, "remaining": None}
+    try:
+        new_count = await supabase.rpc("consume_code_run", {"p_user_id": user.id, "p_limit": limit})
+    except SupabaseError as error:
+        if "consume_code_run" in error.message or "PGRST202" in error.message:
+            raise APIError(
+                503, "schema_outdated",
+                "Falta actualizar la base de datos: ejecuta de nuevo supabase/schema.sql en Supabase.",
+            ) from error
+        raise APIError(503, "db_unavailable", "Error al cargar datos. Recarga la página.") from error
+    if new_count is None or int(new_count) < 0:
+        raise APIError(
+            429,
+            "rate_limit",
+            f"Has usado tus {limit} ejecuciones de PedusCode de hoy. Se restablecerán mañana.",
+            remaining=0,
+            resets_at=next_reset_iso(),
+            limit=limit,
+            feature="peduscode",
+        )
+    used = int(new_count)
+    return {"unlimited": False, "used": used, "limit": limit, "remaining": max(0, limit - used)}
+
+
+async def refund_code_run(user: CurrentUser) -> None:
+    """Devuelve una ejecución de PedusCode si no se llegó a generar nada."""
+    if user.is_owner or not user.has_ultra:
+        return
+    try:
+        await supabase.rpc("refund_code_run", {"p_user_id": user.id})
     except SupabaseError:
         pass

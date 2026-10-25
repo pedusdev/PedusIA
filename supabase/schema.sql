@@ -1,5 +1,5 @@
 -- =====================================================================
--- PedusIA — Esquema completo de Supabase
+-- PedusGPT — Esquema completo de Supabase
 -- Ejecuta este archivo ENTERO en: Supabase → SQL Editor → New query → Run
 -- Es idempotente: puedes volver a ejecutarlo sin romper nada.
 --
@@ -41,6 +41,9 @@ create table if not exists public.profiles (
 -- Columnas nuevas (por si la tabla ya existía con el esquema base)
 alter table public.profiles add column if not exists default_model text default 'pedus-gpt-2';
 alter table public.profiles add column if not exists last_seen_at timestamptz default null;
+-- Contador diario de PedusCode (agente de código, Plan MAX)
+alter table public.profiles add column if not exists daily_code_runs integer default 0;
+alter table public.profiles add column if not exists last_code_reset date default ((now() at time zone 'utc')::date);
 
 create table if not exists public.conversations (
     id uuid default gen_random_uuid() primary key,
@@ -127,6 +130,8 @@ begin
         new.ban_reason := old.ban_reason;
         new.daily_405b_requests := old.daily_405b_requests;
         new.last_405b_reset := old.last_405b_reset;
+        new.daily_code_runs := old.daily_code_runs;
+        new.last_code_reset := old.last_code_reset;
         new.email := old.email;
         new.id := old.id;
     end if;
@@ -347,6 +352,59 @@ revoke execute on function public.reset_daily_405b_requests() from public, anon,
 grant execute on function public.consume_405b_request(uuid, integer) to service_role;
 grant execute on function public.refund_405b_request(uuid) to service_role;
 grant execute on function public.reset_daily_405b_requests() to service_role;
+
+-- ---------------------------------------------------------------------
+-- LÍMITE DIARIO DE PEDUSCODE (reinicio 00:00 UTC)
+-- ---------------------------------------------------------------------
+
+-- Consume 1 ejecución de forma atómica. Devuelve el nuevo contador,
+-- o -1 si el usuario ya alcanzó el límite de hoy.
+create or replace function public.consume_code_run(p_user_id uuid, p_limit integer)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_today date := (now() at time zone 'utc')::date;
+    v_count integer;
+begin
+    update public.profiles
+    set daily_code_runs = case
+            when last_code_reset is null or last_code_reset < v_today then 1
+            else coalesce(daily_code_runs, 0) + 1
+        end,
+        last_code_reset = v_today
+    where id = p_user_id
+      and (last_code_reset is null or last_code_reset < v_today or coalesce(daily_code_runs, 0) < p_limit)
+    returning daily_code_runs into v_count;
+
+    if not found then
+        return -1;
+    end if;
+    return v_count;
+end;
+$$;
+
+-- Devuelve una ejecución (si el organizador falló y no se hizo nada)
+create or replace function public.refund_code_run(p_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    update public.profiles
+    set daily_code_runs = greatest(0, coalesce(daily_code_runs, 0) - 1)
+    where id = p_user_id
+      and last_code_reset = (now() at time zone 'utc')::date;
+end;
+$$;
+
+revoke execute on function public.consume_code_run(uuid, integer) from public, anon, authenticated;
+revoke execute on function public.refund_code_run(uuid) from public, anon, authenticated;
+grant execute on function public.consume_code_run(uuid, integer) to service_role;
+grant execute on function public.refund_code_run(uuid) to service_role;
 
 -- (Opcional) Reset programado a las 00:00 UTC con pg_cron.
 -- No es imprescindible: el backend ya reinicia el contador al detectar un día nuevo.

@@ -1,5 +1,5 @@
 /* =====================================================================
-   PedusIA — Exportar conversaciones: TXT, PDF (jsPDF) y copiar
+   PedusGPT — Exportar conversaciones: TXT, PDF (jsPDF) y copiar
    ===================================================================== */
 
 const Exporter = {
@@ -25,7 +25,7 @@ const Exporter = {
     const conv = Sidebar.find(conversationId);
     if (conversationId === Chat.currentId && Chat.messages.length && !Chat.streaming) {
       return {
-        title: (conv && conv.title) || $("#chat-title").textContent || "PedusIA",
+        title: (conv && conv.title) || $("#chat-title").textContent || "PedusGPT",
         messages: Chat.messages
           .filter((m) => !m.failed)
           .map((m) => ({ role: m.role, content: m.content, file_name: m.file_name, created_at: m.created_at })),
@@ -33,7 +33,7 @@ const Exporter = {
     }
     const data = await api(`/conversations/${conversationId}/messages`);
     return {
-      title: (data.conversation && data.conversation.title) || (conv && conv.title) || "PedusIA",
+      title: (data.conversation && data.conversation.title) || (conv && conv.title) || "PedusGPT",
       messages: data.messages || [],
     };
   },
@@ -45,7 +45,7 @@ const Exporter = {
   /** Convierte la conversación a texto plano legible */
   toText({ title, messages }) {
     const lines = [
-      `PedusIA — ${title}`,
+      `PedusGPT — ${title}`,
       `${t("exported_on")}: ${new Date().toLocaleString(I18n.locale())}`,
       "=".repeat(48),
       "",
@@ -68,7 +68,7 @@ const Exporter = {
       .replace(/^-+|-+$/g, "")
       .toLowerCase()
       .slice(0, 50) || "conversacion";
-    return `pedusia-${slug}.${ext}`;
+    return `pedusgpt-${slug}.${ext}`;
   },
 
   download(blob, name) {
@@ -155,7 +155,7 @@ const Exporter = {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9.5);
     doc.setTextColor(107, 107, 107);
-    doc.text(`PedusIA · ${t("exported_on")}: ${new Date().toLocaleString(I18n.locale())}`, margin, y);
+    doc.text(`PedusGPT · ${t("exported_on")}: ${new Date().toLocaleString(I18n.locale())}`, margin, y);
     y += 14;
     doc.setDrawColor(229, 227, 220);
     doc.line(margin, y, pageWidth - margin, y);
@@ -219,7 +219,7 @@ const Exporter = {
         blockquote{border-inline-start:3px solid #E5E3DC;margin:0;padding-inline-start:12px;color:#6B6B6B}
         .copy-code-btn,.code-lang{display:none}
       </style></head><body><h1>${escapeHtml(title)}</h1>
-      <div class="meta">PedusIA · ${escapeHtml(t("exported_on"))}: ${escapeHtml(new Date().toLocaleString(I18n.locale()))}</div>${items}</body></html>`;
+      <div class="meta">PedusGPT · ${escapeHtml(t("exported_on"))}: ${escapeHtml(new Date().toLocaleString(I18n.locale()))}</div>${items}</body></html>`;
 
     const frame = document.createElement("iframe");
     frame.setAttribute("aria-hidden", "true");

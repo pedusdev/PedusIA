@@ -1,5 +1,5 @@
 """
-Configuración central de PedusIA.
+Configuración central de PedusGPT.
 Todas las variables sensibles se leen de variables de entorno (o del archivo .env en local).
 """
 import os
@@ -49,7 +49,7 @@ def _env_int(name: str, default: int) -> int:
 class Settings:
     """Contenedor de configuración (solo lectura en tiempo de ejecución)."""
 
-    APP_NAME = "PedusIA"
+    APP_NAME = "PedusGPT"
     VERSION = "1.0.0"
 
     # --- Entorno ---
@@ -91,6 +91,26 @@ class Settings:
     OWNER_EMAIL = _env("OWNER_EMAIL").lower()
     ULTRA_DAILY_LIMIT = _env_int("ULTRA_DAILY_LIMIT", 30)
     CONTACT_EMAIL = _env("CONTACT_EMAIL", "equipo@pedusia.com")
+
+    # --- PedusCode (agente de código con varios agentes en paralelo) ---
+    # Ejecuciones al día para MAX/admin (el owner no tiene límite)
+    PEDUSCODE_DAILY_LIMIT = _env_int("PEDUSCODE_DAILY_LIMIT", 3)
+    # Modelo(s) del organizador: el primero disponible
+    PEDUSCODE_PLANNER_MODELS = _env_list(
+        "PEDUSCODE_PLANNER_MODELS", "openai/gpt-oss-120b,llama-3.3-70b-versatile,openai/gpt-oss-20b"
+    )
+    # Modelos de los agentes. Se reparten entre todos para sumar sus límites por minuto.
+    PEDUSCODE_WORKER_MODELS = _env_list(
+        "PEDUSCODE_WORKER_MODELS",
+        "openai/gpt-oss-120b,openai/gpt-oss-20b,qwen/qwen3.8-27b,llama-3.3-70b-versatile",
+    )
+    # Máximo de agentes trabajadores (organizador + 9 = 10 llamadas)
+    PEDUSCODE_MAX_AGENTS = max(1, min(9, _env_int("PEDUSCODE_MAX_AGENTS", 9)))
+    # Tokens por minuto que permite Groq a CADA modelo en tu cuenta
+    # (plan gratuito: 8000). Si pagas el plan Developer, súbelo y irá más rápido.
+    GROQ_TPM_LIMIT = max(2000, _env_int("GROQ_TPM_LIMIT", 8000))
+    # Tokens máximos que puede escribir cada agente
+    PEDUSCODE_WORKER_MAX_TOKENS = max(800, _env_int("PEDUSCODE_WORKER_MAX_TOKENS", 4000))
 
     # --- Límites ---
     MAX_UPLOAD_BYTES = _env_int("MAX_UPLOAD_MB", 10) * 1024 * 1024

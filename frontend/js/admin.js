@@ -1,5 +1,5 @@
 /* =====================================================================
-   PedusIA — Panel de administración (solo admin y owner)
+   PedusGPT — Panel de administración (solo admin y owner)
    ===================================================================== */
 
 const Admin = {

@@ -1,5 +1,5 @@
 /* =====================================================================
-   PedusIA — Núcleo de la aplicación
+   PedusGPT — Núcleo de la aplicación
    Estado global, cliente API, toasts, modales, diálogos, menús,
    utilidades, atajos de teclado e inicialización.
    ===================================================================== */
@@ -23,6 +23,17 @@ const App = {
     $("#banned-view").hidden = name !== "banned";
     $("#app-view").hidden = name !== "app";
     this.hideSplash();
+  },
+
+  /* ---------------- Secciones (chat / PedusCode) ---------------- */
+  section: "chat",
+
+  showSection(name) {
+    this.section = name === "code" ? "code" : "chat";
+    $("#chat-area").hidden = this.section !== "chat";
+    $("#code-area").hidden = this.section !== "code";
+    $("#peduscode-btn").classList.toggle("active", this.section === "code");
+    if (this.section === "code") Sidebar.setActive(null);
   },
 
   hideSplash() {
@@ -53,7 +64,8 @@ const App = {
       Chat.reset();
       ModelSelector.setInitial();
       await Sidebar.load();
-      Chat.openFromHash();
+      if (location.hash === "#/code") PedusCode.open();
+      else Chat.openFromHash();
     } catch (error) {
       if (error.code === "banned" || error.status === 401) return;
       this.showView("auth");
@@ -66,6 +78,8 @@ const App = {
   onSignedOut() {
     this.user = null;
     this.profile = null;
+    PedusCode.reset();
+    this.showSection("chat");
     Chat.reset();
     Sidebar.clear();
     Modal.closeAll();
@@ -109,6 +123,7 @@ const App = {
     $("#admin-btn").hidden = !["admin", "owner"].includes(profile.role);
     ModelSelector.render();
     Chat.updateGreeting();
+    PedusCode.renderAccess();
   },
 
   get hasUltra() {
@@ -583,7 +598,7 @@ function setupShortcuts() {
       Sidebar.toggle();
     } else if (mod && (key === "/" || event.code === "Slash")) {
       event.preventDefault();
-      $("#message-input").focus();
+      $(App.section === "code" ? "#code-task" : "#message-input").focus();
     }
   });
 }
@@ -604,6 +619,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   Exporter.init();
   Settings.init();
   Admin.init();
+  PedusCode.init();
 
   // Traducciones dinámicas al cambiar de idioma
   document.addEventListener("languagechange", () => {

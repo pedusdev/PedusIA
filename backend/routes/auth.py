@@ -24,6 +24,8 @@ async def public_config():
         "supabase_anon_key": settings.SUPABASE_ANON_KEY,
         "contact_email": settings.CONTACT_EMAIL,
         "ultra_daily_limit": settings.ULTRA_DAILY_LIMIT,
+        "peduscode_daily_limit": settings.PEDUSCODE_DAILY_LIMIT,
+        "peduscode_max_agents": settings.PEDUSCODE_MAX_AGENTS,
         "max_upload_mb": settings.MAX_UPLOAD_BYTES // (1024 * 1024),
         "vision_enabled": bool(settings.GROQ_VISION_MODEL),
         "models": [

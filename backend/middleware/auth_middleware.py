@@ -195,3 +195,20 @@ def ultra_usage(profile: dict) -> dict:
         "limit": limit,
         "remaining": None if unlimited else max(0, limit - used),
     }
+
+
+def code_usage(profile: dict) -> dict:
+    """Uso diario de PedusCode a partir del perfil."""
+    role = profile.get("role", "user")
+    used = profile.get("daily_code_runs") or 0
+    if str(profile.get("last_code_reset") or "") < today_utc():
+        used = 0
+    limit = settings.PEDUSCODE_DAILY_LIMIT
+    unlimited = role == "owner"
+    return {
+        "has_access": role in ULTRA_ROLES,
+        "unlimited": unlimited,
+        "used": used,
+        "limit": limit,
+        "remaining": None if unlimited else max(0, limit - used),
+    }

@@ -1,5 +1,5 @@
 """
-PedusIA — Servidor principal (FastAPI).
+PedusGPT — Servidor principal (FastAPI).
 
 Sirve la API REST en /api/v1 y el frontend estático desde ../frontend.
 Arranque local:  uvicorn main:app --reload --port 8000
@@ -24,7 +24,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from config import settings
 from middleware.rate_limiter import ip_limiter
-from routes import auth, chat, conversations, files, users
+from routes import auth, chat, code, conversations, files, users
 from services.groq_service import groq_service
 from services.supabase_service import SupabaseError, supabase
 from utils.helpers import APIError
@@ -44,14 +44,14 @@ async def lifespan(_app: FastAPI):
     missing = settings.missing_required()
     if missing:
         logger.warning("⚠️  Faltan variables de entorno: %s", ", ".join(missing))
-    logger.info("PedusIA %s arrancando. Frontend: %s", settings.VERSION, settings.FRONTEND_DIR)
+    logger.info("PedusGPT %s arrancando. Frontend: %s", settings.VERSION, settings.FRONTEND_DIR)
     yield
     await supabase.close()
     await groq_service.close()
 
 
 app = FastAPI(
-    title="PedusIA API",
+    title="PedusGPT API",
     version=settings.VERSION,
     lifespan=lifespan,
     docs_url=None if settings.IS_PRODUCTION else "/docs",
@@ -389,7 +389,7 @@ if not settings.IS_PRODUCTION:
         }
 
 
-for module in (auth, chat, conversations, users, files):
+for module in (auth, chat, conversations, users, files, code):
     app.include_router(module.router, prefix=API_PREFIX)
 
 

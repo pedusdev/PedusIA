@@ -1,5 +1,5 @@
 /* =====================================================================
-   PedusIA — Temas: claro / oscuro / sistema
+   PedusGPT — Temas: claro / oscuro / sistema
    ===================================================================== */
 
 const Themes = {

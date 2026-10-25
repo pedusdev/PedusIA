@@ -1,5 +1,5 @@
 /* =====================================================================
-   PedusIA — Sidebar: historial de conversaciones agrupado por fecha
+   PedusGPT — Sidebar: historial de conversaciones agrupado por fecha
    ===================================================================== */
 
 const Sidebar = {
@@ -245,7 +245,11 @@ const Sidebar = {
     try {
       await api(`/conversations/${conv.id}`, { method: "DELETE" });
       this.remove(conv.id);
-      if (Chat.currentId === conv.id) Chat.newConversation();
+      if (Chat.currentId === conv.id) {
+        // En PedusCode no se cambia de sección: solo se limpia el chat en segundo plano
+        if (App.section === "code") Chat.reset();
+        else Chat.newConversation();
+      }
       toast(t("chat_deleted"), "success");
     } catch (error) {
       toast(errorMessage(error), "error");

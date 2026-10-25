@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>PedusIA — Tu asistente de IA</title>
-  <meta name="description" content="PedusIA es un asistente de inteligencia artificial gratuito para estudiantes: resuelve dudas, explica temas paso a paso, te ayuda con los deberes, la programación y los idiomas." />
+  <title>PedusGPT — Tu asistente de IA</title>
+  <meta name="description" content="PedusGPT es un asistente de inteligencia artificial gratuito para estudiantes: resuelve dudas, explica temas paso a paso y te ayuda con los deberes, la programación y los idiomas." />
   <meta name="robots" content="index, follow, max-image-preview:large" />
-  <meta name="application-name" content="PedusIA" />
+  <meta name="application-name" content="PedusGPT" />
   <meta name="theme-color" content="#F5F5F0" />
   <meta name="color-scheme" content="light dark" />
   <link rel="canonical" href="__SITE_URL__/" />
@@ -14,33 +14,58 @@
 
   <!-- Open Graph / redes sociales (WhatsApp, Instagram, X...) -->
   <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="PedusIA" />
+  <meta property="og:site_name" content="PedusGPT" />
   <meta property="og:locale" content="es_ES" />
   <meta property="og:url" content="__SITE_URL__/" />
-  <meta property="og:title" content="PedusIA — Tu asistente de IA" />
-  <meta property="og:description" content="PedusIA es un asistente de inteligencia artificial gratuito para estudiantes: resuelve dudas, explica temas paso a paso, te ayuda con los deberes, la programación y los idiomas." />
+  <meta property="og:title" content="PedusGPT — Tu asistente de IA" />
+  <meta property="og:description" content="PedusGPT es un asistente de inteligencia artificial gratuito para estudiantes: resuelve dudas, explica temas paso a paso y te ayuda con los deberes, la programación y los idiomas." />
   <meta property="og:image" content="__SITE_URL__/assets/logo.png" />
-  <meta property="og:image:alt" content="Logo de PedusIA" />
+  <meta property="og:image:alt" content="Logo de PedusGPT" />
   <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="PedusIA — Tu asistente de IA" />
-  <meta name="twitter:description" content="PedusIA es un asistente de inteligencia artificial gratuito para estudiantes: resuelve dudas, explica temas paso a paso, te ayuda con los deberes, la programación y los idiomas." />
+  <meta name="twitter:title" content="PedusGPT — Tu asistente de IA" />
+  <meta name="twitter:description" content="PedusGPT es un asistente de inteligencia artificial gratuito para estudiantes: resuelve dudas, explica temas paso a paso y te ayuda con los deberes, la programación y los idiomas." />
   <meta name="twitter:image" content="__SITE_URL__/assets/logo.png" />
 
-  <!-- Datos estructurados para Google (no es código ejecutable) -->
+  <!-- Datos estructurados para Google (no es código ejecutable).
+       WebSite le dice a Google el nombre exacto del sitio ("PedusGPT"). -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "WebApplication",
-    "name": "PedusIA",
-    "alternateName": "PedusGPT",
-    "url": "__SITE_URL__/",
-    "image": "__SITE_URL__/assets/logo.png",
-    "description": "PedusIA es un asistente de inteligencia artificial gratuito para estudiantes: resuelve dudas, explica temas paso a paso, te ayuda con los deberes, la programación y los idiomas.",
-    "applicationCategory": "EducationalApplication",
-    "operatingSystem": "Web",
-    "inLanguage": ["es", "en", "fr", "de", "it", "pt", "ca", "ja", "zh", "ko", "ru", "ar"],
-    "audience": { "@type": "EducationalAudience", "educationalRole": "student" },
-    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" }
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "__SITE_URL__/#website",
+        "name": "PedusGPT",
+        "alternateName": ["PedusIA", "Pedus GPT", "PedusGPT chat", "PedusCode"],
+        "url": "__SITE_URL__/",
+        "inLanguage": "es",
+        "publisher": { "@id": "__SITE_URL__/#organization" }
+      },
+      {
+        "@type": "Organization",
+        "@id": "__SITE_URL__/#organization",
+        "name": "PedusGPT",
+        "alternateName": "PedusIA",
+        "url": "__SITE_URL__/",
+        "logo": "__SITE_URL__/assets/logo.png",
+        "sameAs": ["https://github.com/pedusdev/PedusIA"]
+      },
+      {
+        "@type": "WebApplication",
+        "@id": "__SITE_URL__/#app",
+        "name": "PedusGPT",
+        "alternateName": "PedusIA",
+        "url": "__SITE_URL__/",
+        "image": "__SITE_URL__/assets/logo.png",
+        "description": "PedusGPT es un asistente de inteligencia artificial gratuito para estudiantes: resuelve dudas, explica temas paso a paso y te ayuda con los deberes, la programación y los idiomas.",
+        "applicationCategory": "EducationalApplication",
+        "operatingSystem": "Web",
+        "inLanguage": ["es", "en", "fr", "de", "it", "pt", "ca", "ja", "zh", "ko", "ru", "ar"],
+        "audience": { "@type": "EducationalAudience", "educationalRole": "student" },
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+        "publisher": { "@id": "__SITE_URL__/#organization" }
+      }
+    ]
   }
   </script>
 
@@ -78,9 +103,9 @@
        ================================================================ -->
   <main id="auth-view" class="auth-view" hidden>
     <div class="auth-card glass fade-in-up">
-      <img src="/assets/logo.png" alt="Logo de PedusIA" class="auth-logo logo-breathe" width="64" height="64" />
-      <h1 class="auth-title">PedusIA</h1>
-      <p class="auth-tagline" data-i18n="auth_tagline">Tu asistente de IA gratuito para estudiar: resuelve dudas, entiende cualquier tema y haz tus deberes con ayuda.</p>
+      <img src="/assets/logo.png" alt="Logo de PedusGPT" class="auth-logo logo-breathe" width="64" height="64" />
+      <h1 class="auth-title">PedusGPT</h1>
+      <p class="auth-tagline" data-i18n="auth_tagline">PedusGPT es tu asistente de IA gratuito para estudiar: resuelve dudas, entiende cualquier tema y haz tus deberes con ayuda.</p>
       <p class="auth-subtitle" data-i18n="auth_subtitle">Inicia sesión para empezar a chatear</p>
 
       <div id="config-warning" class="config-warning" role="alert" hidden data-i18n="not_configured"></div>
@@ -138,7 +163,7 @@
         <strong data-i18n="banned_reason">Motivo</strong>
         <p id="banned-reason"></p>
       </div>
-      <p class="muted" data-i18n="banned_contact">Contacta con el equipo de PedusIA si crees que es un error</p>
+      <p class="muted" data-i18n="banned_contact">Contacta con el equipo de PedusGPT si crees que es un error</p>
       <button type="button" id="banned-logout-btn" class="btn btn-secondary btn-block">
         <span data-icon="logout"></span><span data-i18n="logout">Cerrar sesión</span>
       </button>
@@ -154,7 +179,7 @@
       <div class="sidebar-header">
         <div class="brand">
           <img src="/assets/logo.png" alt="" width="28" height="28" class="brand-logo" />
-          <span class="brand-name">PedusIA</span>
+          <span class="brand-name">PedusGPT</span>
         </div>
         <button type="button" id="sidebar-collapse-btn" class="icon-btn" data-icon="sidebar" data-i18n-title="toggle_sidebar"></button>
       </div>
@@ -163,6 +188,12 @@
         <span data-icon="plus"></span>
         <span data-i18n="new_chat">Nueva conversación</span>
         <kbd class="kbd">⌃⇧N</kbd>
+      </button>
+
+      <button type="button" id="peduscode-btn" class="sidebar-link peduscode-link">
+        <span data-icon="code"></span>
+        <span>PedusCode</span>
+        <span class="badge badge-gold badge-xs">MAX</span>
       </button>
 
       <div class="search-box">
@@ -206,7 +237,7 @@
       <header class="chat-header">
         <button type="button" id="menu-btn" class="icon-btn mobile-only" data-icon="menu" data-i18n-title="menu"></button>
         <button type="button" id="sidebar-open-btn" class="icon-btn desktop-collapsed-only" data-icon="sidebar" data-i18n-title="toggle_sidebar"></button>
-        <h2 id="chat-title" class="chat-title">PedusIA</h2>
+        <h2 id="chat-title" class="chat-title">PedusGPT</h2>
         <span id="active-model-badge" class="model-badge"></span>
         <div class="chat-header-actions">
           <button type="button" id="export-btn" class="icon-btn" data-icon="download" data-i18n-title="export" hidden></button>
@@ -264,6 +295,108 @@
 
       <div id="drop-overlay" class="drop-overlay" hidden>
         <div class="drop-box"><span data-icon="paperclip"></span><span data-i18n="drop_files">Suelta el archivo aquí</span></div>
+      </div>
+    </main>
+
+    <!-- PedusCode: agente de código con 10 IAs (solo Plan MAX) -->
+    <main class="chat-area code-area" id="code-area" hidden>
+      <header class="chat-header">
+        <button type="button" id="code-menu-btn" class="icon-btn mobile-only" data-icon="menu" data-i18n-title="menu"></button>
+        <button type="button" id="code-sidebar-btn" class="icon-btn desktop-collapsed-only" data-icon="sidebar" data-i18n-title="toggle_sidebar"></button>
+        <h2 class="chat-title">PedusCode</h2>
+        <span class="badge badge-gold">MAX</span>
+        <div class="chat-header-actions">
+          <span id="code-usage" class="model-badge" hidden></span>
+        </div>
+      </header>
+
+      <div class="code-scroll" id="code-scroll">
+        <div class="code-inner">
+          <!-- Bloqueo para quien no tiene el Plan MAX -->
+          <section id="code-locked" class="plan-card plan-card-premium code-locked" hidden>
+            <div class="plan-crown" data-icon="lock"></div>
+            <h2 class="plan-title">PedusCode <span class="badge badge-gold">MAX</span></h2>
+            <p class="plan-subtitle" data-i18n="code_locked_text">PedusCode es exclusivo del Plan MAX.</p>
+            <button type="button" id="code-locked-btn" class="btn btn-gold"><span data-icon="crown"></span><span data-i18n="code_see_plan">Ver el Plan MAX</span></button>
+          </section>
+
+          <!-- Presentación -->
+          <div class="code-hero">
+            <img src="/assets/logo.png" alt="" width="64" height="64" class="code-hero-logo logo-breathe" />
+            <h1 class="code-hero-title">PedusCode</h1>
+            <p class="code-hero-sub" data-i18n="code_subtitle">Un equipo de 10 IAs que programa por ti, directamente en tu carpeta.</p>
+            <div class="code-pills">
+              <span class="code-pill">🧠 <span data-i18n="code_pill_planner">1 organizador</span></span>
+              <span class="code-pill">🤖 <span data-i18n="code_pill_agents">hasta 9 agentes</span></span>
+              <span class="code-pill">📁 <span data-i18n="code_pill_folder">sin descargas</span></span>
+            </div>
+          </div>
+
+          <section id="code-setup">
+            <!-- Paso 1: carpeta -->
+            <div class="code-card">
+              <div class="code-card-head"><span class="code-step">1</span><h3 data-i18n="code_step_folder">Elige la carpeta del proyecto</h3></div>
+              <div id="code-folder-empty">
+                <p class="muted small" data-i18n="code_folder_desc">PedusCode leerá el código de esa carpeta y guardará ahí los cambios cuando tú los apruebes.</p>
+                <div class="code-folder-actions">
+                  <button type="button" id="code-pick-btn" class="btn btn-primary"><span data-icon="folder"></span><span data-i18n="code_pick_folder">Elegir carpeta</span></button>
+                  <button type="button" id="code-nofolder-btn" class="btn btn-secondary"><span data-icon="sparkles"></span><span data-i18n="code_new_project">Proyecto nuevo (ZIP)</span></button>
+                </div>
+                <p id="code-fs-unsupported" class="code-note code-note-warn small" data-i18n="code_fs_unsupported" hidden>Tu navegador no permite abrir carpetas. Usa Chrome o Edge en un ordenador; mientras tanto, recibirás los archivos en un ZIP.</p>
+                <p class="code-note small"><span data-icon="shield"></span><span data-i18n="code_safety_note">Solo se leen archivos de código. Las carpetas del sistema, los secretos (.env, claves) y node_modules nunca se envían.</span></p>
+              </div>
+              <div id="code-folder-info" class="code-folder-info" hidden>
+                <span class="code-folder-icon" data-icon="folder"></span>
+                <div class="code-folder-text">
+                  <strong id="code-folder-name"></strong>
+                  <span id="code-folder-stats" class="muted small"></span>
+                </div>
+                <button type="button" id="code-rescan-btn" class="icon-btn" data-icon="refresh" data-i18n-title="code_rescan"></button>
+                <button type="button" id="code-clear-folder-btn" class="icon-btn" data-icon="x" data-i18n-title="code_close_folder"></button>
+              </div>
+            </div>
+
+            <!-- Paso 2: tarea -->
+            <div class="code-card">
+              <div class="code-card-head"><span class="code-step">2</span><h3 data-i18n="code_step_task">¿Qué quieres que haga?</h3></div>
+              <textarea id="code-task" class="input code-task" rows="4" maxlength="4000" data-i18n-placeholder="code_task_placeholder" placeholder="Ejemplo: crea un juego de la serpiente con puntuación y récord guardado"></textarea>
+              <div id="code-examples" class="code-examples"></div>
+              <div class="code-run-row">
+                <span id="code-task-counter" class="muted small">0/4000</span>
+                <button type="button" id="code-run-btn" class="btn btn-gold btn-lg"><span data-icon="rocket"></span><span data-i18n="code_run">Lanzar PedusCode</span></button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Paso 3: progreso del equipo -->
+          <section id="code-progress" class="code-card" hidden>
+            <div class="code-card-head">
+              <span class="code-step">3</span><h3 data-i18n="code_step_progress">El equipo está trabajando</h3>
+              <span id="code-timer" class="muted small code-timer"></span>
+              <button type="button" id="code-cancel-btn" class="btn btn-ghost code-small-btn"><span data-icon="stop"></span><span data-i18n="cancel">Cancelar</span></button>
+            </div>
+            <div id="code-planner" class="code-planner"></div>
+            <p id="code-summary" class="code-summary" hidden></p>
+            <div id="code-agents" class="code-agents"></div>
+          </section>
+
+          <!-- Paso 4: revisar y guardar -->
+          <section id="code-results" class="code-card" hidden>
+            <div class="code-card-head">
+              <span class="code-step">4</span><h3 data-i18n="code_step_review">Revisa los cambios</h3>
+              <span id="code-results-count" class="muted small code-timer"></span>
+            </div>
+            <p class="muted small" data-i18n="code_review_desc">Marca los archivos que quieres guardar. Pulsa en uno para ver los cambios.</p>
+            <label class="code-select-all"><input type="checkbox" id="code-select-all" /> <span data-i18n="code_select_all">Seleccionar todo</span></label>
+            <div id="code-file-list" class="code-file-list"></div>
+            <div class="code-results-actions">
+              <button type="button" id="code-save-btn" class="btn btn-primary"><span data-icon="save"></span><span data-i18n="code_save">Guardar en mi carpeta</span></button>
+              <button type="button" id="code-zip-btn" class="btn btn-secondary"><span data-icon="download"></span><span data-i18n="code_download_zip">Descargar ZIP</span></button>
+              <button type="button" id="code-undo-btn" class="btn btn-secondary" hidden><span data-icon="undo"></span><span data-i18n="code_undo">Deshacer</span></button>
+              <button type="button" id="code-new-btn" class="btn btn-ghost"><span data-icon="plus"></span><span data-i18n="code_new_task">Nueva tarea</span></button>
+            </div>
+          </section>
+        </div>
       </div>
     </main>
   </div>
@@ -460,8 +593,9 @@
   <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.10.0/build/highlight.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
-  <!-- PedusIA -->
+  <!-- PedusGPT -->
   <script defer src="/js/icons.js"></script>
   <script defer src="/js/i18n.js"></script>
   <script defer src="/js/themes.js"></script>
@@ -475,5 +609,6 @@
   <script defer src="/js/export.js"></script>
   <script defer src="/js/settings.js"></script>
   <script defer src="/js/admin.js"></script>
+  <script defer src="/js/peduscode.js"></script>
 </body>
 </html>

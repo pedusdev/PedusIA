@@ -1,5 +1,5 @@
 /* =====================================================================
-   PedusIA — Iconos SVG en línea (sin dependencias externas)
+   PedusGPT — Iconos SVG en línea (sin dependencias externas)
    ===================================================================== */
 
 const svg = (paths, size = 18, extra = "") =>
@@ -7,6 +7,12 @@ const svg = (paths, size = 18, extra = "") =>
 
 const Icons = {
   plus: svg('<path d="M12 5v14M5 12h14"/>'),
+  code: svg('<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>'),
+  folder: svg('<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>'),
+  undo: svg('<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/>'),
+  save: svg('<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/>'),
+  alert: svg('<path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"/><path d="M12 9v4M12 17h.01"/>', 16),
+  chevron: svg('<path d="m9 18 6-6-6-6"/>', 16),
   search: svg('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>', 16),
   menu: svg('<path d="M4 6h16M4 12h16M4 18h16"/>', 20),
   sidebar: svg('<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>', 20),
