@@ -1,9 +1,10 @@
 """
 Limitadores de uso:
 1. Limitador general en memoria (ventana deslizante) contra abusos.
-2. Límite diario del modelo PedusGPT 2 PRO ULTRA (persistido en Supabase,
-   con incremento atómico mediante una función SQL).
+2. Límites diarios persistidos en Supabase (incremento atómico con funciones SQL):
+   PedusGPT 2 PRO ULTRA, PedusCode, UltraMAX y búsqueda web.
 """
+import logging
 import time
 from collections import defaultdict, deque
 
@@ -11,6 +12,8 @@ from config import settings
 from middleware.auth_middleware import CurrentUser
 from services.supabase_service import SupabaseError, supabase
 from utils.helpers import APIError, next_reset_iso
+
+logger = logging.getLogger("pedusia.limits")
 
 
 class SlidingWindowLimiter:
@@ -137,5 +140,82 @@ async def refund_code_run(user: CurrentUser) -> None:
         return
     try:
         await supabase.rpc("refund_code_run", {"p_user_id": user.id})
+    except SupabaseError:
+        pass
+
+
+async def consume_ultramax_run(user: CurrentUser) -> dict:
+    """
+    Reglas del esfuerzo UltraMAX (borrador + revisión + respuesta final = 3 llamadas):
+    - user  -> 403 (necesita Plan MAX)
+    - owner -> sin límite
+    - max/admin -> máximo ULTRAMAX_DAILY_LIMIT respuestas al día (reinicio 00:00 UTC)
+    """
+    limit = settings.ULTRAMAX_DAILY_LIMIT
+    if not user.has_ultra:
+        raise APIError(403, "needs_max", "Necesitas el Plan MAX para usar el esfuerzo UltraMAX.")
+    if user.is_owner:
+        return {"unlimited": True, "used": 0, "limit": limit, "remaining": None}
+    try:
+        new_count = await supabase.rpc("consume_ultramax_run", {"p_user_id": user.id, "p_limit": limit})
+    except SupabaseError as error:
+        if "consume_ultramax_run" in error.message or "PGRST202" in error.message:
+            raise APIError(
+                503, "schema_outdated",
+                "Falta actualizar la base de datos: ejecuta de nuevo supabase/schema.sql en Supabase.",
+            ) from error
+        raise APIError(503, "db_unavailable", "Error al cargar datos. Recarga la página.") from error
+    if new_count is None or int(new_count) < 0:
+        raise APIError(
+            429,
+            "rate_limit",
+            f"Has usado tus {limit} respuestas UltraMAX de hoy. Se restablecerán mañana.",
+            remaining=0,
+            resets_at=next_reset_iso(),
+            limit=limit,
+            feature="ultramax",
+        )
+    used = int(new_count)
+    return {"unlimited": False, "used": used, "limit": limit, "remaining": max(0, limit - used)}
+
+
+async def refund_ultramax_run(user: CurrentUser) -> None:
+    """Devuelve un uso de UltraMAX si no se llegó a generar nada."""
+    if user.is_owner or not user.has_ultra:
+        return
+    try:
+        await supabase.rpc("refund_ultramax_run", {"p_user_id": user.id})
+    except SupabaseError:
+        pass
+
+
+async def consume_search_request(user: CurrentUser) -> dict:
+    """
+    Límite de la búsqueda web automática (todos los roles salvo el owner):
+    máximo WEB_SEARCH_DAILY_LIMIT respuestas con búsqueda al día (reinicio 00:00 UTC).
+    Devuelve el uso actualizado con "allowed": True, o {"allowed": False, "reason": ...}
+    si hoy ya no quedan búsquedas ("limit") o la base de datos no está actualizada
+    ("unavailable"). En ambos casos el chat sigue funcionando, solo que sin buscar.
+    """
+    limit = settings.WEB_SEARCH_DAILY_LIMIT
+    if user.is_owner:
+        return {"allowed": True, "unlimited": True, "used": 0, "limit": limit, "remaining": None}
+    try:
+        new_count = await supabase.rpc("consume_search_request", {"p_user_id": user.id, "p_limit": limit})
+    except SupabaseError as error:
+        logger.warning("No se pudo contar la búsqueda web (¿falta ejecutar schema.sql?): %s", error.message)
+        return {"allowed": False, "reason": "unavailable"}
+    if new_count is None or int(new_count) < 0:
+        return {"allowed": False, "reason": "limit", "limit": limit, "remaining": 0}
+    used = int(new_count)
+    return {"allowed": True, "unlimited": False, "used": used, "limit": limit, "remaining": max(0, limit - used)}
+
+
+async def refund_search_request(user: CurrentUser) -> None:
+    """Devuelve una búsqueda si los buscadores no dieron ningún resultado."""
+    if user.is_owner:
+        return
+    try:
+        await supabase.rpc("refund_search_request", {"p_user_id": user.id})
     except SupabaseError:
         pass

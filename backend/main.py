@@ -5,6 +5,7 @@ Sirve la API REST en /api/v1 y el frontend estático desde ../frontend.
 Arranque local:  uvicorn main:app --reload --port 8000
 """
 import asyncio
+import hashlib
 import html
 import logging
 import os
@@ -24,8 +25,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from config import settings
 from middleware.rate_limiter import ip_limiter
-from routes import auth, chat, code, conversations, files, users
-from services.groq_service import groq_service
+from routes import auth, chat, code, conversations, files, skills, users
+from services.groq_service import groq_service, model_name, provider_of
 from services.supabase_service import SupabaseError, supabase
 from utils.helpers import APIError
 
@@ -137,6 +138,11 @@ class SecurityMiddleware:
                     headers.setdefault("Content-Security-Policy", CSP_HEADER)
                 if path.startswith("/api/"):
                     headers.setdefault("Cache-Control", "no-store")
+                elif path.startswith(_STATIC_PREFIXES):
+                    # Con ?v=versión el archivo nunca cambia: caché larga.
+                    # Sin versión, el navegador debe comprobar siempre si hay uno nuevo.
+                    versioned = b"v=" in scope.get("query_string", b"")
+                    headers["Cache-Control"] = "public, max-age=31536000, immutable" if versioned else "no-cache"
             await send(message)
 
         await self.app(scope, receive, send_with_headers)
@@ -348,19 +354,70 @@ async def _diag_groq_request() -> dict:
             "pégala en GROQ_API_KEY (sin comillas ni espacios, empieza por gsk_) y reinicia uvicorn."
         )}
     available = {m.get("id") for m in response.json().get("data", [])}
+
+    def usable(model_ref: str) -> bool:
+        provider = provider_of(model_ref)
+        if provider.name == "groq":
+            return model_name(model_ref) in available
+        return provider.configured  # Mistral: se comprueba aparte en _diag_mistral
+
     chains = {
         "PedusGPT 2": settings.MODEL_CHAIN_BASIC,
         "PedusGPT 2 PRO": settings.MODEL_CHAIN_PRO,
         "PedusGPT 2 PRO ULTRA": settings.MODEL_CHAIN_ULTRA,
         "Títulos": settings.MODEL_CHAIN_TITLE,
+        "Pensar Ultra/UltraMAX": settings.MODEL_CHAIN_DEEP,
     }
     models = {}
     for name, chain in chains.items():
-        usable = next((m for m in chain if m in available), None)
-        models[name] = f"usará {usable}" if usable else f"⚠️ ninguno disponible de {chain}"
+        first = next((m for m in chain if usable(m)), None)
+        models[name] = (
+            f"usará {provider_of(first).label} {model_name(first)}" if first else f"⚠️ ninguno disponible de {chain}"
+        )
     if settings.GROQ_VISION_MODEL:
         models["Visión"] = "OK" if settings.GROQ_VISION_MODEL in available else f"⚠️ {settings.GROQ_VISION_MODEL} no disponible"
     return {"ok": True, "detalle": "Groq OK (la API key funciona).", "modelos": models}
+
+
+async def _diag_mistral() -> dict:
+    """Mistral es opcional: sin clave, PRO ULTRA usa los modelos de Groq."""
+    if not settings.MISTRAL_API_KEY:
+        return {"ok": True, "detalle": "Sin MISTRAL_API_KEY (opcional): se usará solo Groq."}
+    try:
+        response = await groq_service.client.get(
+            f"{settings.MISTRAL_BASE_URL}/models",
+            headers={"Authorization": f"Bearer {settings.MISTRAL_API_KEY}"},
+        )
+    except Exception as error:  # noqa: BLE001
+        return {"ok": False, "error": _short(str(error))}
+    if response.status_code != 200:
+        return {"ok": False, "status": response.status_code, "error": _short(response.text), "solucion": (
+            "La clave de Mistral no es válida. Crea una en https://console.mistral.ai/api-keys y pégala en MISTRAL_API_KEY."
+        )}
+    available = set()
+    for item in response.json().get("data", []):
+        available.add(item.get("id"))
+        available.update(item.get("aliases") or [])
+    wanted = sorted({m.split(":", 1)[1] for chain in (
+        settings.MODEL_CHAIN_BASIC, settings.MODEL_CHAIN_PRO, settings.MODEL_CHAIN_ULTRA, settings.MODEL_CHAIN_DEEP,
+        settings.MODEL_CHAIN_REVIEW, settings.MODEL_CHAIN_TITLE, settings.MODEL_CHAIN_ROUTER,
+    ) for m in chain if m.startswith("mistral:")})
+    models = {m: ("OK" if m in available else "⚠️ no aparece en tu cuenta (se saltará)") for m in wanted}
+    return {"ok": True, "detalle": "Mistral OK (la API key funciona).", "modelos": models}
+
+
+def _diag_search() -> dict:
+    """Solo comprueba la configuración (no gasta créditos de búsqueda)."""
+    engines = []
+    if settings.TAVILY_API_KEY:
+        engines.append("Tavily" + ("" if settings.TAVILY_API_KEY.startswith("tvly-") else " (⚠️ la clave no empieza por tvly-)"))
+    if settings.EXA_API_KEY:
+        engines.append("Exa")
+    if not settings.WEB_SEARCH_ENABLED:
+        return {"ok": True, "detalle": "Desactivada (WEB_SEARCH_ENABLED=false)."}
+    if not engines:
+        return {"ok": True, "detalle": "Sin TAVILY_API_KEY ni EXA_API_KEY (opcional): búsqueda web desactivada."}
+    return {"ok": True, "detalle": f"Activada con {' + '.join(engines)}; {settings.WEB_SEARCH_DAILY_LIMIT} al día por usuario."}
 
 
 if not settings.IS_PRODUCTION:
@@ -371,25 +428,27 @@ if not settings.IS_PRODUCTION:
         if missing:
             return {"ok": False, "faltan_variables": missing, "solucion": "Rellena estas variables en backend/.env y reinicia uvicorn."}
         parts = await asyncio.gather(
-            _diag_supabase_rest(), _diag_supabase_auth(), _diag_storage(), _diag_groq(),
+            _diag_supabase_rest(), _diag_supabase_auth(), _diag_storage(), _diag_groq(), _diag_mistral(),
             return_exceptions=True,
         )
-        rest, auth_check, storage, groq = (
+        rest, auth_check, storage, groq, mistral = (
             part if isinstance(part, dict) else {"ok": False, "error": f"Fallo del diagnóstico: {part}"}
             for part in parts
         )
         return {
-            "ok": all(part["ok"] for part in (rest, auth_check, storage, groq)),
+            "ok": all(part["ok"] for part in (rest, auth_check, storage, groq, mistral)),
             "owner_email": settings.OWNER_EMAIL or "⚠️ sin configurar",
             "jwt_secret": "configurado (verificación local)" if settings.SUPABASE_JWT_SECRET else "vacío (verificación con Supabase, correcto en proyectos nuevos)",
             "supabase_base_de_datos": rest,
             "supabase_auth": auth_check,
             "supabase_storage": storage,
             "groq": groq,
+            "mistral": mistral,
+            "busqueda_web": _diag_search(),
         }
 
 
-for module in (auth, chat, conversations, users, files, code):
+for module in (auth, chat, conversations, users, files, code, skills):
     app.include_router(module.router, prefix=API_PREFIX)
 
 
@@ -397,6 +456,21 @@ for module in (auth, chat, conversations, users, files, code):
 # SEO: página principal con URLs absolutas, robots.txt y sitemap.xml
 # --------------------------------------------------------------------------
 _INDEX_CACHE: dict[str, str] = {}
+_STATIC_PREFIXES = ("/js/", "/css/", "/assets/")
+_ASSET_RE = re.compile(r'((?:src|href)=")(/(?:js|css)/[\w.-]+\.(?:js|css))(")')
+
+
+def _frontend_version() -> str:
+    """Huella de los archivos JS/CSS: cambia en cuanto se modifica cualquiera."""
+    parts = []
+    for folder in ("js", "css"):
+        directory = settings.FRONTEND_DIR / folder
+        if directory.is_dir():
+            for item in sorted(directory.iterdir()):
+                if item.is_file():
+                    stat = item.stat()
+                    parts.append(f"{item.name}:{stat.st_size}:{int(stat.st_mtime)}")
+    return hashlib.md5("|".join(parts).encode("utf-8")).hexdigest()[:10]
 _VERIFICATION_RE = re.compile(r"^[A-Za-z0-9_\-]{10,100}$")
 
 
@@ -429,7 +503,8 @@ def _render_index(request: Request):
     match = re.search(r'content="([^"]+)"', verification)
     if match:
         verification = match.group(1)
-    cache_key = f"{site}|{verification}|{index.stat().st_mtime}"
+    version = _frontend_version()
+    cache_key = f"{site}|{verification}|{index.stat().st_mtime}|{version}"
     page = _INDEX_CACHE.get(cache_key)
     if page is None:
         page = index.read_text(encoding="utf-8").replace("__SITE_URL__", html.escape(site, quote=True))
@@ -437,6 +512,8 @@ def _render_index(request: Request):
         if verification and _VERIFICATION_RE.match(verification):
             meta = f'<meta name="google-site-verification" content="{verification}" />'
         page = page.replace("<!--GOOGLE_SITE_VERIFICATION-->", meta)
+        # Cada despliegue obliga al navegador a descargar los JS/CSS nuevos
+        page = _ASSET_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}?v={version}{m.group(3)}", page)
         _INDEX_CACHE.clear()
         _INDEX_CACHE[cache_key] = page
     return HTMLResponse(page, headers={"Cache-Control": "no-cache"})

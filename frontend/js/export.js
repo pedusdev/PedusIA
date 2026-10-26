@@ -28,7 +28,7 @@ const Exporter = {
         title: (conv && conv.title) || $("#chat-title").textContent || "PedusGPT",
         messages: Chat.messages
           .filter((m) => !m.failed)
-          .map((m) => ({ role: m.role, content: m.content, file_name: m.file_name, created_at: m.created_at })),
+          .map((m) => ({ role: m.role, content: m.content, file_name: m.file_name, created_at: m.created_at, sources: m.sources })),
       };
     }
     const data = await api(`/conversations/${conversationId}/messages`);
@@ -40,6 +40,13 @@ const Exporter = {
 
   roleLabel(role) {
     return role === "user" ? t("you") : "PedusGPT";
+  },
+
+  /** Fuentes de la búsqueda web de un mensaje, en texto ("[1] Título — URL") */
+  sourcesText(m) {
+    const list = typeof WebSearch !== "undefined" ? WebSearch.validSources(m.sources) : [];
+    if (!list.length) return "";
+    return `${t("search_sources")}:\n${list.map((s) => `[${s.n}] ${s.title} — ${s.url}`).join("\n")}`;
   },
 
   /** Convierte la conversación a texto plano legible */
@@ -55,6 +62,8 @@ const Exporter = {
       lines.push(`[${this.roleLabel(m.role)}]${when}`);
       if (m.file_name) lines.push(`📎 ${m.file_name}`);
       lines.push(m.role === "assistant" ? Markdown.toPlainText(m.content || "") : (m.content || ""));
+      const sources = this.sourcesText(m);
+      if (sources) lines.push("", sources);
       lines.push("");
     });
     return lines.join("\n").trim() + "\n";
@@ -175,6 +184,8 @@ const Exporter = {
       doc.setTextColor(26, 26, 26);
       let body = isUser ? (m.content || "") : Markdown.toPlainText(m.content || "");
       if (m.file_name) body = `[${m.file_name}]\n${body}`;
+      const sources = this.sourcesText(m);
+      if (sources) body += `\n\n${sources}`;
       body = this.pdfSafe(body);
       body.split("\n").forEach((paragraph) => {
         const lines = paragraph.trim() ? doc.splitTextToSize(paragraph, width) : [""];
@@ -205,7 +216,11 @@ const Exporter = {
     const items = messages.map((m) => {
       const body = m.role === "assistant" ? Markdown.toHtml(m.content || "") : `<p>${escapeHtml(m.content || "").replace(/\n/g, "<br>")}</p>`;
       const file = m.file_name ? `<div class="file">📎 ${escapeHtml(m.file_name)}</div>` : "";
-      return `<section class="msg ${m.role === "user" ? "user" : "ai"}"><h3>${escapeHtml(this.roleLabel(m.role))}</h3>${file}<div class="body">${body}</div></section>`;
+      const list = typeof WebSearch !== "undefined" ? WebSearch.validSources(m.sources) : [];
+      const sources = list.length
+        ? `<div class="file"><strong>${escapeHtml(t("search_sources"))}</strong><br>${list.map((src) => `[${src.n}] <a href="${escapeHtml(src.url)}">${escapeHtml(src.title)}</a>`).join("<br>")}</div>`
+        : "";
+      return `<section class="msg ${m.role === "user" ? "user" : "ai"}"><h3>${escapeHtml(this.roleLabel(m.role))}</h3>${file}<div class="body">${body}</div>${sources}</section>`;
     }).join("");
 
     const html = `<!DOCTYPE html><html lang="${I18n.current}" dir="${dir}"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>

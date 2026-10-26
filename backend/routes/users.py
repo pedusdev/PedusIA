@@ -10,7 +10,15 @@ from fastapi import APIRouter, Depends, File, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from config import settings
-from middleware.auth_middleware import CurrentUser, code_usage, get_current_user, require_admin, ultra_usage
+from middleware.auth_middleware import (
+    CurrentUser,
+    code_usage,
+    get_current_user,
+    require_admin,
+    search_usage,
+    ultra_usage,
+    ultramax_usage,
+)
 from middleware.rate_limiter import check_limit, upload_limiter
 from services.groq_service import MODEL_CATALOG
 from services.supabase_service import SupabaseError, supabase
@@ -40,6 +48,8 @@ def serialize_profile(profile: dict) -> dict:
     data["default_model"] = data.get("default_model") or "pedus-gpt-2"
     data["ultra"] = {**ultra_usage(profile), "resets_at": next_reset_iso()}
     data["code"] = {**code_usage(profile), "resets_at": next_reset_iso()}
+    data["ultramax"] = {**ultramax_usage(profile), "resets_at": next_reset_iso()}
+    data["search"] = {**search_usage(profile), "resets_at": next_reset_iso()}
     return data
 
 
@@ -240,18 +250,28 @@ async def admin_reset_limits(user_id: UUID, actor: CurrentUser = Depends(require
         "last_405b_reset": today_utc(),
         "daily_code_runs": 0,
         "last_code_reset": today_utc(),
+        "daily_ultramax_runs": 0,
+        "last_ultramax_reset": today_utc(),
+        "daily_search_requests": 0,
+        "last_search_reset": today_utc(),
     }
-    try:
-        rows = await supabase.update("profiles", {"id": f"eq.{user_id}"}, changes)
-    except SupabaseError as error:
-        # Base de datos sin las columnas de PedusCode (schema.sql antiguo): resetear solo ULTRA
-        if "daily_code_runs" not in error.message and "last_code_reset" not in error.message:
-            raise db_error(error) from error
-        changes = {"daily_405b_requests": 0, "last_405b_reset": today_utc()}
+    new_columns = ("daily_code_runs", "last_code_reset", "daily_ultramax_runs", "last_ultramax_reset",
+                   "daily_search_requests", "last_search_reset")
+    # Base de datos sin las columnas nuevas (schema.sql antiguo): ir quitando las que falten
+    fallbacks = [
+        changes,
+        {k: v for k, v in changes.items() if "search" not in k},
+        {"daily_405b_requests": 0, "last_405b_reset": today_utc()},
+    ]
+    rows = None
+    for index, attempt in enumerate(fallbacks):
         try:
-            rows = await supabase.update("profiles", {"id": f"eq.{user_id}"}, changes)
-        except SupabaseError as retry_error:
-            raise db_error(retry_error) from retry_error
+            rows = await supabase.update("profiles", {"id": f"eq.{user_id}"}, attempt)
+            changes = attempt
+            break
+        except SupabaseError as error:
+            if index == len(fallbacks) - 1 or not any(col in error.message for col in new_columns):
+                raise db_error(error) from error
     return _admin_user_row(rows[0] if rows else {**target, **changes})
 
 

@@ -286,6 +286,21 @@ const Settings = {
       }));
     }
 
+    // Uso de la búsqueda web automática (si está activada)
+    const search = profile.search;
+    if (App.config && App.config.web_search && search && !search.unlimited && search.limit) {
+      const searchPercent = Math.min(100, Math.round((search.used / search.limit) * 100));
+      usageBlock += `
+        <div class="usage-label" style="margin-top:14px"><span>🌐 ${escapeHtml(t("search_usage_label"))}</span><strong>${search.used}/${search.limit}</strong></div>
+        <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${search.limit}" aria-valuenow="${search.used}">
+          <div class="progress-bar progress-bar-search${searchPercent >= 100 ? " full" : ""}" style="width:0%"></div>
+        </div>`;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const bar = card.querySelector(".progress-bar-search");
+        if (bar) bar.style.width = `${searchPercent}%`;
+      }));
+    }
+
     const title = profile.role === "max" ? t("max_have") : t("plan_staff_access", { role: t(`role_${profile.role}`) });
     card.innerHTML = `
       <div class="plan-crown">${Icons.crown}</div>

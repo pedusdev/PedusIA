@@ -126,8 +126,11 @@ const Chat = {
 
   init() {
     const input = $("#message-input");
-    input.addEventListener("input", () => { this.autoResize(); this.updateSendState(); });
+    input.addEventListener("input", () => { this.autoResize(); this.updateSendState(); Skills.handleInput(); });
+    input.addEventListener("blur", () => setTimeout(() => Skills.hideSuggest(), 120));
     input.addEventListener("keydown", (event) => {
+      // Sugerencias de skills ("/") tienen prioridad sobre Enter
+      if (Skills.handleKeydown(event)) return;
       if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
         event.preventDefault();
         this.send();
@@ -186,6 +189,7 @@ const Chat = {
     $("#chat-title").textContent = "PedusGPT";
     Files.clear();
     Voice.stopSpeaking();
+    Skills.resetSelection();
   },
 
   newConversation() {
@@ -363,6 +367,11 @@ const Chat = {
 
       const bubble = document.createElement("div");
       bubble.className = "bubble bubble-ai";
+      // Razonamiento guardado (plegado) y skills usadas
+      if (!typing && (msg.reasoning || msg.effort)) {
+        bubble.appendChild(Reasoning.createBlock(msg));
+        bubble.classList.add("has-think");
+      }
       const content = document.createElement("div");
       content.className = "markdown";
       if (typing) {
@@ -374,6 +383,9 @@ const Chat = {
       body.appendChild(bubble);
       msg.contentEl = content;
       msg.bubbleEl = bubble;
+      if (!typing && Array.isArray(msg.skills) && msg.skills.length) Skills.renderUsed(msg, msg.skills);
+      // Fuentes de la búsqueda web (y citas [n] enlazadas)
+      if (!typing && Array.isArray(msg.sources) && msg.sources.length) WebSearch.renderSources(msg, msg.sources);
 
       const like = this.actionButton("like", "thumbsUp", "like");
       const dislike = this.actionButton("dislike", "thumbsDown", "dislike");
@@ -534,7 +546,10 @@ const Chat = {
   async stream({ message = "", fileIds = [], regenerate = false, userMsg = null, restore = null, restoreMessage = null }) {
     const conversationId = this.currentId;
     const model = ModelSelector.selected;
+    const thinking = Reasoning.payload();
+    const skills = Skills.payload();
     const aiMsg = this.appendMessage({ id: null, role: "assistant", content: "", liked: null }, { typing: true });
+    if (thinking.think) Reasoning.attachLive(aiMsg, thinking.effort);
     this.scrollToBottom(true);
     this.setStreaming(true);
     const controller = new AbortController();
@@ -544,7 +559,7 @@ const Chat = {
     try {
       response = await api("/chat/stream", {
         method: "POST",
-        body: { conversation_id: conversationId, message, model, files: fileIds, regenerate },
+        body: { conversation_id: conversationId, message, model, files: fileIds, regenerate, ...thinking, ...skills },
         raw: true,
         signal: controller.signal,
       });
@@ -604,7 +619,7 @@ const Chat = {
     // Si el usuario cambió de conversación mientras tanto, no tocar la UI
     if (conversationId !== this.currentId) return true;
 
-    this.finalizeAiMessage(aiMsg);
+    this.finalizeAiMessage(aiMsg, { stopped: aborted });
     if (aborted && aiMsg.content) setTimeout(() => this.syncIds(), 1200);
     if (aiMsg.errorMessage) toast(aiMsg.errorMessage, "error");
     Sidebar.touch(conversationId);
@@ -612,11 +627,21 @@ const Chat = {
   },
 
   handleStreamEvent(event, aiMsg, userMsg) {
+    // Búsqueda web: "search", "sources", "search_limit", "search_failed"
+    if (WebSearch.handleEvent(event, aiMsg)) {
+      this.scrollToBottom();
+      return;
+    }
     switch (event.type) {
       case "start":
         if (userMsg && event.user_message_id) {
           userMsg.id = event.user_message_id;
           if (userMsg.el) userMsg.el.dataset.id = userMsg.id;
+        }
+        if (event.ultramax && App.profile) {
+          App.profile.ultramax = { ...(App.profile.ultramax || {}), ...event.ultramax };
+          const left = event.ultramax.remaining;
+          if (typeof left === "number" && left <= 3) toast(t("ultramax_remaining", { n: left }), "warning", 4000);
         }
         if (event.ultra && App.profile) {
           App.profile.ultra = { ...App.profile.ultra, ...event.ultra };
@@ -627,14 +652,38 @@ const Chat = {
         }
         break;
       case "token":
+        if (!aiMsg.content) {
+          Reasoning.answerStarted(aiMsg);
+          Skills.setRouting(aiMsg, false);
+          WebSearch.setSearching(aiMsg, null);
+        }
         aiMsg.content += event.content || "";
         this.scheduleRender(aiMsg);
+        break;
+      case "reasoning":
+        Skills.setRouting(aiMsg, false);
+        Reasoning.append(aiMsg, event.content || "");
+        this.scrollToBottom();
+        break;
+      case "phase":
+        Reasoning.setPhase(aiMsg, event.phase);
+        break;
+      case "waiting":
+        Reasoning.setWaiting(aiMsg, event.seconds);
+        break;
+      case "skills_routing":
+        Skills.setRouting(aiMsg, true);
+        break;
+      case "skills":
+        Skills.setRouting(aiMsg, false);
+        Skills.renderUsed(aiMsg, event.skills, !!event.auto);
         break;
       case "done":
         if (event.message_id) {
           aiMsg.id = event.message_id;
           aiMsg.el.dataset.id = aiMsg.id;
         }
+        Reasoning.finish(aiMsg, { thinkingMs: event.thinking_ms });
         break;
       case "error":
         if (event.message_id) {
@@ -654,14 +703,20 @@ const Chat = {
     this.renderPending = true;
     requestAnimationFrame(() => {
       this.renderPending = false;
-      if (!aiMsg.contentEl || !aiMsg.content) return;
+      // Si la respuesta ya terminó, no volver a pintar el cursor de escritura
+      if (!aiMsg.contentEl || !aiMsg.content || aiMsg.finalized) return;
       Markdown.render(aiMsg.contentEl, aiMsg.content, { streaming: true });
+      WebSearch.linkCitations(aiMsg);
       this.scrollToBottom();
     });
   },
 
-  finalizeAiMessage(aiMsg) {
+  finalizeAiMessage(aiMsg, { stopped = false } = {}) {
     this.renderPending = false;
+    aiMsg.finalized = true;
+    Skills.setRouting(aiMsg, false);
+    WebSearch.setSearching(aiMsg, null);
+    Reasoning.finish(aiMsg, { stopped });
     if (!aiMsg.content) {
       if (aiMsg.errorMessage) {
         aiMsg.bubbleEl.classList.add("error");
@@ -674,6 +729,7 @@ const Chat = {
       }
     } else {
       Markdown.render(aiMsg.contentEl, aiMsg.content);
+      WebSearch.linkCitations(aiMsg);
       aiMsg.actionsEl.hidden = false;
     }
     this.updateLastClass();
@@ -682,6 +738,20 @@ const Chat = {
 
   handleRequestError(error) {
     const limit = (App.config && App.config.ultra_daily_limit) || 30;
+    if (error.code === "rate_limit" && error.data && error.data.feature === "ultramax") {
+      if (App.profile && App.profile.ultramax) {
+        App.profile.ultramax.remaining = 0;
+        App.profile.ultramax.used = App.profile.ultramax.limit;
+      }
+      dialog({
+        icon: "⏳",
+        title: t("ultramax_limit_title"),
+        text: t("ultramax_limit_text", { limit: (App.config && App.config.ultramax_daily_limit) || 10 }),
+        confirmText: t("understood"),
+        hideCancel: true,
+      });
+      return;
+    }
     if (error.code === "rate_limit") {
       if (App.profile && App.profile.ultra) {
         App.profile.ultra.remaining = 0;

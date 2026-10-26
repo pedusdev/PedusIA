@@ -11,7 +11,8 @@ from fastapi import APIRouter, Depends
 from config import settings
 from middleware.auth_middleware import CurrentUser, get_current_user
 from routes.users import serialize_profile
-from services.groq_service import MODEL_CATALOG
+from services.groq_service import EFFORTS, MODEL_CATALOG
+from services.search_service import search_enabled
 
 router = APIRouter(tags=["auth"])
 
@@ -26,6 +27,11 @@ async def public_config():
         "ultra_daily_limit": settings.ULTRA_DAILY_LIMIT,
         "peduscode_daily_limit": settings.PEDUSCODE_DAILY_LIMIT,
         "peduscode_max_agents": settings.PEDUSCODE_MAX_AGENTS,
+        "ultramax_daily_limit": settings.ULTRAMAX_DAILY_LIMIT,
+        "efforts": [{"id": key, "max_only": info["max_only"]} for key, info in EFFORTS.items()],
+        "skills_max": settings.SKILLS_MAX_PER_USER,
+        "web_search": search_enabled(),
+        "web_search_daily_limit": settings.WEB_SEARCH_DAILY_LIMIT,
         "max_upload_mb": settings.MAX_UPLOAD_BYTES // (1024 * 1024),
         "vision_enabled": bool(settings.GROQ_VISION_MODEL),
         "models": [

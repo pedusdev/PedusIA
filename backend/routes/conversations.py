@@ -15,6 +15,10 @@ from utils.helpers import APIError, clean_text, utc_now
 router = APIRouter(tags=["conversations"])
 
 MESSAGE_FIELDS = "id,conversation_id,role,content,file_url,file_type,file_name,liked,created_at"
+# Columnas del modo pensar y skills (schema.sql actualizado)
+MESSAGE_FIELDS_EXTRA = MESSAGE_FIELDS + ",reasoning,thinking_ms,effort,skills"
+# Con las fuentes de la búsqueda web (columna añadida después)
+MESSAGE_FIELDS_SOURCES = MESSAGE_FIELDS_EXTRA + ",sources"
 
 
 def db_error() -> APIError:
@@ -138,19 +142,27 @@ async def delete_conversation(conversation_id: UUID, user: CurrentUser = Depends
 @router.get("/conversations/{conversation_id}/messages")
 async def list_messages(conversation_id: UUID, user: CurrentUser = Depends(get_current_user)):
     conversation = await get_owned_conversation(conversation_id, user.id)
-    try:
-        rows, _ = await supabase.select(
-            "messages",
-            {
-                "conversation_id": f"eq.{conversation_id}",
-                "role": "neq.system",
-                "select": MESSAGE_FIELDS,
-                "order": "created_at.asc",
-                "limit": 1000,
-            },
-        )
-    except SupabaseError as error:
-        raise db_error() from error
+    params = {
+        "conversation_id": f"eq.{conversation_id}",
+        "role": "neq.system",
+        "order": "created_at.asc",
+        "limit": 1000,
+    }
+    rows: list[dict] = []
+    last_error: SupabaseError | None = None
+    # Base de datos sin las columnas nuevas (schema.sql antiguo): probar con menos columnas
+    for fields in (MESSAGE_FIELDS_SOURCES, MESSAGE_FIELDS_EXTRA, MESSAGE_FIELDS):
+        try:
+            rows, _ = await supabase.select("messages", {**params, "select": fields})
+            last_error = None
+            break
+        except SupabaseError as error:
+            last_error = error
+            text = error.message.lower()
+            if not any(key in text for key in ("42703", "pgrst204", "sources", "reasoning", "thinking_ms", "does not exist")):
+                break
+    if last_error is not None:
+        raise db_error() from last_error
     return {"conversation": conversation, "messages": rows}
 
 

@@ -1,11 +1,12 @@
 /* =====================================================================
    PedusGPT — PedusCode: agente de código con 10 IAs (solo Plan MAX)
+   Interfaz de terminal al estilo de los agentes de programación:
+   - Comandos con "/" y autocompletado, historial con ↑/↓.
    - Lee una carpeta elegida por el usuario (File System Access API).
    - Filtra secretos, carpetas del sistema y dependencias ANTES de enviar.
-   - Muestra en directo el trabajo del organizador y de cada agente (SSE).
-   - Nada se escribe sin revisión: el usuario elige qué archivos guardar,
-     se detectan cambios hechos mientras tanto y se puede deshacer.
-   - Si el navegador no permite carpetas, entrega un ZIP.
+   - Muestra en directo el organizador y cada agente (SSE).
+   - Nada se escribe sin revisión: menús de opciones con flechas,
+     detección de cambios externos y deshacer. ZIP como alternativa.
    ===================================================================== */
 
 const PedusCode = (() => {
@@ -14,14 +15,15 @@ const PedusCode = (() => {
   /* ------------------------------------------------------------------ */
   const LIMITS = {
     taskChars: 4000,
-    maxFiles: 600,          // archivos con contenido enviados
-    maxFileChars: 120000,   // por archivo
-    maxTotalChars: 580000,  // total enviado (el backend admite 600K)
-    maxTree: 3000,          // entradas del árbol
-    maxScan: 6000,          // archivos recorridos como máximo
+    maxFiles: 600,
+    maxFileChars: 120000,
+    maxTotalChars: 580000,
+    maxTree: 3000,
+    maxScan: 6000,
     maxDepth: 12,
     maxPreviewLines: 1500,
     diffCells: 4000000,
+    history: 50,
   };
 
   /* Carpetas que nunca se recorren (dependencias, builds, control de versiones, secretos) */
@@ -29,14 +31,12 @@ const PedusCode = (() => {
     ".git", ".hg", ".svn", "node_modules", ".venv", "venv", "env", "__pycache__", ".mypy_cache", ".pytest_cache",
     ".ruff_cache", ".tox", ".nox", "dist", "build", "out", ".next", ".nuxt", ".svelte-kit", ".output", ".turbo",
     ".parcel-cache", ".cache", ".vite", "coverage", "target", "vendor", "bower_components", ".idea", ".vs",
-    ".gradle", "Pods", ".dart_tool", "obj", "bin", ".terraform", ".ssh", ".aws", ".gnupg", ".azure", ".kube",
+    ".gradle", "pods", ".dart_tool", "obj", "bin", ".terraform", ".ssh", ".aws", ".gnupg", ".azure", ".kube",
     ".docker", "$recycle.bin", "system volume information",
-  ].map((name) => name.toLowerCase()));
-
+  ]);
   /* Carpetas donde nunca se escribe (mismas que en el backend) */
   const WRITE_BLOCKED_DIRS = new Set([".git", ".hg", ".svn", "node_modules", ".venv", "venv", "__pycache__",
     ".ssh", ".aws", ".gnupg", ".azure", ".kube", ".docker", ".terraform"]);
-
   /* Nombres de carpeta que delatan una carpeta del sistema o personal completa */
   const BLOCKED_ROOT_NAMES = new Set([
     "windows", "system32", "syswow64", "program files", "program files (x86)", "programdata", "appdata",
@@ -78,7 +78,8 @@ const PedusCode = (() => {
     "pyproject.toml", "cargo.toml", "go.mod", "tsconfig.json", "vite.config.js", "vite.config.ts", "main.js",
     "app.js", "index.js", "main.ts", "index.ts", "styles.css", "style.css"];
 
-  const EXAMPLES = ["code_ex1", "code_ex2", "code_ex3"];
+  /* Animación del indicador de actividad */
+  const SPINNER = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"];
 
   /* ------------------------------------------------------------------ */
   /* Estado                                                              */
@@ -87,21 +88,56 @@ const PedusCode = (() => {
     initialized: false,
     dirHandle: null,
     folderName: "",
-    zipMode: false,          // proyecto nuevo sin carpeta
-    scan: null,              // { tree, files, stats }
-    snapshot: new Map(),     // ruta -> contenido leído (texto normalizado tal cual)
-    existing: new Set(),     // todas las rutas que existían al escanear
+    zipMode: false,
+    scan: null,
+    snapshot: new Map(),
+    existing: new Set(),
     scanning: false,
     running: false,
     controller: null,
-    timer: null,
     startedAt: 0,
-    agents: new Map(),       // id -> { data, el, status }
-    results: new Map(),      // ruta -> resultado
-    undo: null,              // [{ path, existed, original }]
+    statusTimer: null,
+    spinner: 0,
+    statusMain: "",
+    escArmedAt: 0,
+    agents: new Map(),
+    results: new Map(),
+    plannedFiles: 0,
+    deliveredFiles: 0,
+    undo: null,
     saving: false,
-    plannerDone: false,
+    history: [],
+    historyIndex: -1,
+    draft: "",
+    choice: null,
+    suggestIndex: 0,
+    suggestions: [],
+    review: null,
+    pristine: true,
+    lockedShown: null,
+    stick: true,
   };
+
+  /* ------------------------------------------------------------------ */
+  /* Comandos                                                            */
+  /* ------------------------------------------------------------------ */
+  const COMMANDS = [
+    { name: "carpeta", aliases: ["folder", "cd", "open", "abrir"], desc: "term_cmd_carpeta", busy: true, run: () => pickFolder() },
+    { name: "nuevo", aliases: ["new"], desc: "term_cmd_nuevo", busy: true, run: () => useZipMode() },
+    { name: "archivos", aliases: ["ls", "files", "tree"], desc: "term_cmd_archivos", run: () => listFiles() },
+    { name: "releer", aliases: ["rescan", "reload"], desc: "term_cmd_releer", busy: true, run: () => rescanCmd() },
+    { name: "cerrar", aliases: ["close"], desc: "term_cmd_cerrar", busy: true, run: () => closeFolderCmd() },
+    { name: "guardar", aliases: ["save"], desc: "term_cmd_guardar", busy: true, run: () => saveCmd() },
+    { name: "deshacer", aliases: ["undo"], desc: "term_cmd_deshacer", busy: true, run: () => undoCmd() },
+    { name: "zip", aliases: ["download"], desc: "term_cmd_zip", busy: true, run: () => zipCmd() },
+    { name: "uso", aliases: ["usage", "status"], desc: "term_cmd_uso", free: true, run: () => usageCmd() },
+    { name: "limpiar", aliases: ["clear", "cls"], desc: "term_cmd_limpiar", free: true, run: () => clearScreen() },
+    { name: "ayuda", aliases: ["help", "?"], desc: "term_cmd_ayuda", free: true, run: () => helpCmd() },
+  ];
+
+  function findCommand(name) {
+    return COMMANDS.find((cmd) => cmd.name === name || cmd.aliases.includes(name)) || null;
+  }
 
   /* ------------------------------------------------------------------ */
   /* Utilidades de rutas y archivos                                       */
@@ -140,9 +176,7 @@ const PedusCode = (() => {
     return path;
   }
 
-  function normalizeNewlines(text) {
-    return String(text ?? "").replace(/\r\n/g, "\n");
-  }
+  const normalizeNewlines = (text) => String(text ?? "").replace(/\r\n/g, "\n");
 
   function slug(text) {
     return String(text || "proyecto").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -153,8 +187,10 @@ const PedusCode = (() => {
     const seconds = Math.max(0, Math.round(total));
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
-    return m ? `${m}:${String(s).padStart(2, "0")}` : `${s} s`;
+    return m ? `${m}m ${String(s).padStart(2, "0")}s` : `${s}s`;
   }
+
+  const formatNumber = (n) => Number(n || 0).toLocaleString(I18n.locale());
 
   /* ------------------------------------------------------------------ */
   /* Acceso a la carpeta                                                  */
@@ -173,18 +209,15 @@ const PedusCode = (() => {
   async function getFileHandle(root, path, create) {
     const parts = path.split("/");
     let dir = root;
-    for (const part of parts.slice(0, -1)) {
-      dir = await dir.getDirectoryHandle(part, { create });
-    }
-    return { dir, file: await dir.getFileHandle(parts[parts.length - 1], { create }), name: parts[parts.length - 1] };
+    for (const part of parts.slice(0, -1)) dir = await dir.getDirectoryHandle(part, { create });
+    return dir.getFileHandle(parts[parts.length - 1], { create });
   }
 
-  /** Lee el contenido actual de un archivo de la carpeta (null si no existe) */
+  /** Contenido actual de un archivo de la carpeta (null si no existe) */
   async function readCurrent(path) {
     try {
-      const { file } = await getFileHandle(state.dirHandle, path, false);
-      const blob = await file.getFile();
-      return await blob.text();
+      const handle = await getFileHandle(state.dirHandle, path, false);
+      return await (await handle.getFile()).text();
     } catch (error) {
       if (error && (error.name === "NotFoundError" || error.name === "TypeMismatchError")) return null;
       throw error;
@@ -192,8 +225,8 @@ const PedusCode = (() => {
   }
 
   async function writeFileTo(path, content) {
-    const { file } = await getFileHandle(state.dirHandle, path, true);
-    const writable = await file.createWritable();
+    const handle = await getFileHandle(state.dirHandle, path, true);
+    const writable = await handle.createWritable();
     try {
       await writable.write(content);
     } finally {
@@ -208,7 +241,7 @@ const PedusCode = (() => {
     await dir.removeEntry(parts[parts.length - 1]);
   }
 
-  /** Comprueba que la carpeta elegida no sea del sistema ni una carpeta personal entera */
+  /** La carpeta elegida no puede ser del sistema ni una carpeta personal entera */
   async function isBlockedRoot(handle) {
     const name = String(handle.name || "").trim().toLowerCase();
     if (!name || /^[a-z]:\\?$/.test(name) || name === "/" || BLOCKED_ROOT_NAMES.has(name)) return true;
@@ -260,7 +293,7 @@ const PedusCode = (() => {
 
     await walk(handle, "", 0);
 
-    // Prioridad: archivos clave primero, después los más pequeños y menos profundos
+    // Prioridad: archivos clave primero, después los menos profundos y más pequeños
     const priority = (item) => {
       const index = PRIORITY_NAMES.indexOf(item.name);
       return index === -1 ? 100 : index;
@@ -282,99 +315,546 @@ const PedusCode = (() => {
     }
     stats.sent = files.length;
     stats.chars = total;
-
     tree.sort((a, b) => a.path.localeCompare(b.path));
     return { tree: tree.slice(0, LIMITS.maxTree), files, stats, snapshot, existing };
   }
 
   /* ------------------------------------------------------------------ */
-  /* Interfaz: carpeta                                                   */
+  /* Salida de la terminal                                               */
   /* ------------------------------------------------------------------ */
-  function renderFolder() {
-    const hasFolder = !!state.dirHandle || state.zipMode;
-    $("#code-folder-empty").hidden = hasFolder;
-    $("#code-folder-info").hidden = !hasFolder;
-    $("#code-fs-unsupported").hidden = fsSupported();
-    $("#code-pick-btn").disabled = !fsSupported() || state.scanning;
-    $("#code-rescan-btn").hidden = !state.dirHandle;
-    if (!hasFolder) return;
+  const output = () => $("#term-output");
+  const input = () => $("#term-input");
 
-    const nameEl = $("#code-folder-name");
-    const statsEl = $("#code-folder-stats");
-    if (state.zipMode) {
-      nameEl.textContent = t("code_new_project_mode");
-      statsEl.textContent = t("code_new_project_stats");
-      return;
-    }
-    nameEl.textContent = state.folderName;
-    if (state.scanning || !state.scan) {
-      statsEl.textContent = t("code_scanning");
-      return;
-    }
-    const s = state.scan.stats;
-    const skipped = s.secret + s.ignored + s.big + s.binary;
-    statsEl.textContent = t("code_folder_stats", { files: s.sent, skipped });
-    statsEl.title = s.secret ? t("code_secret_skipped", { n: s.secret }) : "";
+  function el(tag, className = "", text = null) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== null) node.textContent = text;
+    return node;
   }
 
+  function scrollDown(force = false) {
+    const body = $("#term-body");
+    if (force || state.stick) requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
+  }
+
+  function append(node) {
+    output().appendChild(node);
+    scrollDown();
+    return node;
+  }
+
+  /** Línea simple de texto */
+  function printLine(text, className = "") {
+    state.pristine = false;
+    return append(el("div", `term-line ${className}`.trim(), text));
+  }
+
+  /** Elemento con viñeta "⏺" (como las acciones de un agente) */
+  function printItem(text, color = "", bullet = "⏺") {
+    state.pristine = false;
+    const root = el("div", "term-item");
+    const head = el("div", "term-item-head");
+    const dot = el("span", `term-bullet ${color ? `b-${color}` : ""}`.trim(), bullet);
+    const label = el("span", "term-item-text", text);
+    head.append(dot, label);
+    const subs = el("div", "term-subs");
+    root.append(head, subs);
+    append(root);
+    return { root, dot, label, subs };
+  }
+
+  /** Línea secundaria "⎿" debajo de un elemento */
+  function addSub(item, text, className = "") {
+    const row = el("div", `term-sub ${className}`.trim());
+    const glyph = el("span", "term-sub-glyph", item.subs.children.length ? " " : "⎿");
+    const label = el("span", "term-sub-text", text);
+    row.append(glyph, label);
+    item.subs.appendChild(row);
+    scrollDown();
+    return label;
+  }
+
+  function printError(text, detail = "") {
+    const item = printItem(text, "red");
+    if (detail) addSub(item, detail);
+    return item;
+  }
+
+  /** Eco de lo que escribió el usuario */
+  function printUser(text) {
+    state.pristine = false;
+    const row = el("div", "term-user");
+    row.append(el("span", "term-user-caret", ">"), el("span", "term-user-text", text));
+    return append(row);
+  }
+
+  /** Botón con aspecto de comando dentro de la salida */
+  function chip(label, onClick, className = "") {
+    const button = el("button", `term-chip ${className}`.trim(), label);
+    button.type = "button";
+    button.addEventListener("click", onClick);
+    return button;
+  }
+
+  function clearScreen() {
+    dismissChoice();
+    output().innerHTML = "";
+    state.review = null;
+    state.agents.forEach((entry) => { entry.detached = true; });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Pantalla de bienvenida                                              */
+  /* ------------------------------------------------------------------ */
+  function cwdLabel() {
+    if (state.dirHandle) return `~/${state.folderName}`;
+    if (state.zipMode) return `~/${t("term_zip_mode")}`;
+    return "~";
+  }
+
+  function printWelcome() {
+    const box = el("div", "term-welcome");
+    const head = el("div", "term-welcome-head");
+    head.append(el("span", "term-star", "✻"), el("strong", "", t("term_welcome")));
+    box.append(head, el("div", "term-welcome-sub", t("code_subtitle")));
+    const meta = el("div", "term-welcome-meta");
+    meta.append(el("span", "", "cwd: "), el("span", "term-welcome-cwd", cwdLabel()));
+    box.appendChild(meta);
+    output().appendChild(box);
+
+    if (!App.hasUltra) {
+      printLocked();
+    } else {
+      const tips = el("div", "term-tips");
+      tips.appendChild(el("div", "term-tips-title", t("term_tips_title")));
+      ["term_tip1", "term_tip2", "term_tip3"].forEach((key, index) => {
+        tips.appendChild(el("div", "term-tip", `${index + 1}. ${t(key)}`));
+      });
+      const row = el("div", "term-chips");
+      if (fsSupported()) row.appendChild(chip("📁 /carpeta", () => submitText("/carpeta")));
+      row.appendChild(chip("✨ /nuevo", () => submitText("/nuevo")));
+      row.appendChild(chip("? /ayuda", () => submitText("/ayuda")));
+      tips.appendChild(row);
+      const tryRow = el("div", "term-try");
+      tryRow.appendChild(el("span", "term-dim", `${t("term_try")} `));
+      const example = el("button", "term-example", `"${t("code_ex1")}"`);
+      example.type = "button";
+      example.addEventListener("click", () => { input().value = t("code_ex1"); autoResize(); focusInput(); });
+      tryRow.appendChild(example);
+      tips.appendChild(tryRow);
+      if (!fsSupported()) tips.appendChild(el("div", "term-line c-yellow", `⚠ ${t("code_fs_unsupported")}`));
+      output().appendChild(tips);
+    }
+    state.pristine = true;
+    scrollDown(true);
+  }
+
+  function printLocked() {
+    const item = printItem(t("code_locked_text"), "accent", "✻");
+    const row = el("div", "term-chips");
+    row.appendChild(chip(`👑 ${t("code_see_plan")}`, () => Settings.openPlanModal(), "term-chip-gold"));
+    item.subs.appendChild(row);
+  }
+
+  function printLimit() {
+    const limit = (usage() && usage().limit) || (App.config && App.config.peduscode_daily_limit) || 3;
+    const item = printItem(t("code_limit_title"), "yellow");
+    addSub(item, t("code_limit_text", { limit }));
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Cabecera, pistas y uso                                              */
+  /* ------------------------------------------------------------------ */
+  function usage() {
+    return (App.profile && App.profile.code) || null;
+  }
+
+  function updateChrome() {
+    $("#term-title").textContent = `pedus@code: ${cwdLabel()}`;
+    const cwd = $("#term-hint-right");
+    if (state.dirHandle) {
+      cwd.textContent = state.scan ? `📁 ${state.folderName} · ${t("code_files_count", { n: state.scan.stats.sent })}` : `📁 ${state.folderName}`;
+    } else if (state.zipMode) {
+      cwd.textContent = `✨ ${t("term_zip_mode")}`;
+    } else {
+      cwd.textContent = t("term_no_folder");
+    }
+    const locked = !App.hasUltra;
+    const field = input();
+    field.disabled = locked;
+    field.placeholder = locked ? t("code_locked_text") : t("term_placeholder");
+    $("#term-hint-left").textContent = state.running ? `${t("term_hint_running")} · ${t("term_hint")}` : t("term_hint");
+    renderUsage();
+  }
+
+  function renderUsage() {
+    const chipEl = $("#code-usage");
+    const info = usage();
+    if (!info || !App.hasUltra) { chipEl.hidden = true; return; }
+    chipEl.hidden = false;
+    chipEl.textContent = info.unlimited ? `∞ ${t("code_usage_unlimited")}` : t("code_usage_chip", { used: info.used, limit: info.limit });
+    chipEl.classList.toggle("empty", !info.unlimited && info.remaining === 0);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Indicador de actividad (línea de estado animada)                     */
+  /* ------------------------------------------------------------------ */
+  function startStatus(text) {
+    state.statusMain = text;
+    const box = $("#term-status");
+    box.innerHTML = "";
+    box.append(el("span", "term-spin", SPINNER[0]), el("span", "term-status-main"), el("span", "term-status-meta"));
+    box.hidden = false;
+    clearInterval(state.statusTimer);
+    state.statusTimer = setInterval(() => { state.spinner += 1; renderStatus(); }, 120);
+    renderStatus();
+  }
+
+  function setStatus(text) {
+    state.statusMain = text;
+    renderStatus();
+  }
+
+  function renderStatus() {
+    const box = $("#term-status");
+    if (box.hidden || !box.firstChild) return;
+    box.querySelector(".term-spin").textContent = SPINNER[state.spinner % SPINNER.length];
+    box.querySelector(".term-status-main").textContent = state.statusMain;
+    const armed = Date.now() - state.escArmedAt < 2500;
+    const meta = box.querySelector(".term-status-meta");
+    meta.textContent = ` (${formatSeconds((Date.now() - state.startedAt) / 1000)} · ${armed ? t("term_esc_again") : t("term_hint_running")})`;
+    meta.classList.toggle("armed", armed);
+  }
+
+  function stopStatus() {
+    clearInterval(state.statusTimer);
+    state.statusTimer = null;
+    $("#term-status").hidden = true;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Menús de opciones (↑/↓, Enter, números, Esc)                         */
+  /* ------------------------------------------------------------------ */
+  function choose(question, options, { details = [], danger = false } = {}) {
+    dismissChoice();
+    state.pristine = false;
+    return new Promise((resolve) => {
+      const box = el("div", `term-choice${danger ? " danger" : ""}`);
+      box.tabIndex = 0;
+      const questionEl = el("div", "term-choice-q", question);
+      box.appendChild(questionEl);
+      details.forEach((line) => box.appendChild(el("div", "term-choice-detail", line)));
+      const list = el("div", "term-choice-list");
+      list.setAttribute("role", "listbox");
+      const buttons = options.map((label, index) => {
+        const button = el("button", "term-option");
+        button.type = "button";
+        button.setAttribute("role", "option");
+        button.append(el("span", "term-option-caret", "❯"), el("span", "term-option-n", `${index + 1}.`), el("span", "term-option-label", label));
+        button.addEventListener("click", () => finish(index));
+        button.addEventListener("mousemove", () => setIndex(index));
+        list.appendChild(button);
+        return button;
+      });
+      box.appendChild(list);
+      const hint = el("div", "term-choice-hint", t("term_choice_hint"));
+      box.appendChild(hint);
+
+      const choice = { box, questionEl, index: 0, count: options.length, setIndex, finish };
+      function setIndex(index) {
+        choice.index = (index + options.length) % options.length;
+        buttons.forEach((button, i) => {
+          button.classList.toggle("active", i === choice.index);
+          button.setAttribute("aria-selected", i === choice.index ? "true" : "false");
+        });
+      }
+      function finish(index) {
+        if (state.choice !== choice) return;
+        state.choice = null;
+        box.classList.add("answered");
+        buttons.forEach((button, i) => { button.disabled = true; button.classList.toggle("chosen", i === index); });
+        hint.remove();
+        resolve(index);
+        focusInput();
+      }
+      state.choice = choice;
+      append(box);
+      setIndex(0);
+      box.focus({ preventScroll: true });
+      scrollDown(true);
+    });
+  }
+
+  function dismissChoice() {
+    if (state.choice) state.choice.finish(-1);
+  }
+
+  function handleChoiceKey(event) {
+    const choice = state.choice;
+    if (!choice) return false;
+    const field = input();
+    if (event.target === field && field.value) return false;
+    if (event.key === "ArrowDown" || event.key === "ArrowRight") choice.setIndex(choice.index + 1);
+    else if (event.key === "ArrowUp" || event.key === "ArrowLeft") choice.setIndex(choice.index - 1);
+    else if (event.key === "Enter") choice.finish(choice.index);
+    else if (event.key === "Escape") choice.finish(choice.count - 1);
+    else if (/^[1-9]$/.test(event.key) && Number(event.key) <= choice.count) choice.finish(Number(event.key) - 1);
+    else return false;
+    event.preventDefault();
+    event.stopPropagation();
+    return true;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Entrada: envío, historial y autocompletado                           */
+  /* ------------------------------------------------------------------ */
+  function focusInput() {
+    const field = input();
+    if (!field.disabled && !$("#code-area").hidden) field.focus({ preventScroll: true });
+  }
+
+  function autoResize() {
+    const field = input();
+    field.style.height = "auto";
+    field.style.height = `${Math.min(field.scrollHeight, 220)}px`;
+  }
+
+  function pushHistory(text) {
+    if (state.history[state.history.length - 1] !== text) state.history.push(text);
+    if (state.history.length > LIMITS.history) state.history.shift();
+    state.historyIndex = -1;
+    state.draft = "";
+  }
+
+  function browseHistory(direction) {
+    if (!state.history.length) return false;
+    const field = input();
+    if (state.historyIndex === -1) {
+      if (direction > 0) return false;
+      state.draft = field.value;
+      state.historyIndex = state.history.length - 1;
+    } else {
+      state.historyIndex += direction;
+      if (state.historyIndex < 0) state.historyIndex = 0;
+      if (state.historyIndex >= state.history.length) {
+        state.historyIndex = -1;
+        field.value = state.draft;
+        autoResize();
+        return true;
+      }
+    }
+    field.value = state.history[state.historyIndex];
+    autoResize();
+    requestAnimationFrame(() => field.setSelectionRange(field.value.length, field.value.length));
+    return true;
+  }
+
+  function updateSuggest() {
+    const box = $("#term-suggest");
+    const value = input().value;
+    if (!value.startsWith("/") || /\s/.test(value)) { hideSuggest(); return; }
+    const query = value.slice(1).toLowerCase();
+    state.suggestions = COMMANDS.filter((cmd) => cmd.name.startsWith(query) || cmd.aliases.some((alias) => alias.startsWith(query)));
+    if (!state.suggestions.length) { hideSuggest(); return; }
+    state.suggestIndex = Math.min(state.suggestIndex, state.suggestions.length - 1);
+    box.innerHTML = "";
+    state.suggestions.forEach((cmd, index) => {
+      const row = el("button", `term-suggest-row${index === state.suggestIndex ? " active" : ""}`);
+      row.type = "button";
+      row.setAttribute("role", "option");
+      row.append(el("span", "term-suggest-name", `/${cmd.name}`), el("span", "term-suggest-desc", t(cmd.desc)));
+      row.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        submitText(`/${cmd.name}`);
+      });
+      box.appendChild(row);
+    });
+    box.hidden = false;
+  }
+
+  function hideSuggest() {
+    $("#term-suggest").hidden = true;
+    state.suggestions = [];
+    state.suggestIndex = 0;
+  }
+
+  function onInputKeydown(event) {
+    if (event.isComposing) return;
+    const field = input();
+    const suggesting = !$("#term-suggest").hidden && state.suggestions.length;
+
+    if (suggesting) {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const delta = event.key === "ArrowDown" ? 1 : -1;
+        state.suggestIndex = (state.suggestIndex + delta + state.suggestions.length) % state.suggestions.length;
+        updateSuggest();
+        return;
+      }
+      if (event.key === "Tab") {
+        event.preventDefault();
+        field.value = `/${state.suggestions[state.suggestIndex].name}`;
+        hideSuggest();
+        return;
+      }
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        const typed = field.value.slice(1).toLowerCase();
+        const exact = findCommand(typed);
+        submitText(exact ? field.value : `/${state.suggestions[state.suggestIndex].name}`);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        hideSuggest();
+        return;
+      }
+    }
+
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      submit();
+      return;
+    }
+    if (event.key === "ArrowUp" && field.selectionStart === 0 && field.selectionEnd === 0 && !state.choice) {
+      if (browseHistory(-1)) event.preventDefault();
+      return;
+    }
+    if (event.key === "ArrowDown" && field.selectionStart === field.value.length && state.historyIndex !== -1) {
+      if (browseHistory(1)) event.preventDefault();
+      return;
+    }
+    if (event.key.toLowerCase() === "c" && (event.ctrlKey || event.metaKey) && field.selectionStart === field.selectionEnd && state.running) {
+      event.preventDefault();
+      requestCancel();
+      return;
+    }
+    if (event.key.toLowerCase() === "l" && event.ctrlKey && !event.shiftKey) {
+      event.preventDefault();
+      clearScreen();
+    }
+  }
+
+  function submit() {
+    submitText(input().value);
+  }
+
+  function submitText(raw) {
+    const text = String(raw || "").trim();
+    const field = input();
+    field.value = "";
+    autoResize();
+    hideSuggest();
+    if (!text) return;
+    dismissChoice();
+    pushHistory(text);
+    state.stick = true;
+    if (text.startsWith("/") || text === "?") runCommand(text);
+    else runTask(text);
+    focusInput();
+  }
+
+  function runCommand(text) {
+    printUser(text);
+    const name = text === "?" ? "ayuda" : text.slice(1).split(/\s+/)[0].toLowerCase();
+    const cmd = findCommand(name);
+    if (!cmd) { printLine(t("term_unknown_cmd", { cmd: `/${name}` }), "c-red"); return; }
+    if (!App.hasUltra && !cmd.free) { printLocked(); return; }
+    if ((state.running || state.saving) && cmd.busy) { printLine(t("term_busy"), "c-yellow"); return; }
+    Promise.resolve()
+      .then(() => cmd.run())
+      .catch(() => printError(t("code_error_generic")));
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Comandos: carpeta                                                   */
+  /* ------------------------------------------------------------------ */
   async function pickFolder() {
-    if (!fsSupported()) { toast(t("code_fs_unsupported"), "warning", 6000); return; }
+    if (!fsSupported()) { printLine(`⚠ ${t("code_fs_unsupported")}`, "c-yellow"); return false; }
     let handle;
     try {
       handle = await window.showDirectoryPicker({ id: "peduscode", mode: "readwrite" });
     } catch (error) {
-      if (error && error.name === "AbortError") return; // el usuario cerró el selector
-      toast(t("code_folder_error"), "error");
-      return;
+      if (error && error.name === "AbortError") { printLine(t("term_pick_cancelled"), "c-dim"); return false; }
+      printError(t("code_folder_error"));
+      return false;
     }
+    return useHandle(handle);
+  }
+
+  async function useHandle(handle) {
     try {
       if (await isBlockedRoot(handle)) {
-        dialog({ icon: "🛡️", title: t("code_folder_blocked_title"), text: t("code_folder_blocked"), confirmText: t("understood"), hideCancel: true });
-        return;
+        printError(t("code_folder_blocked_title"), t("code_folder_blocked"));
+        return false;
       }
     } catch (_) {
-      toast(t("code_folder_error"), "error");
-      return;
+      printError(t("code_folder_error"));
+      return false;
     }
     state.dirHandle = handle;
     state.folderName = handle.name;
     state.zipMode = false;
     state.undo = null;
-    $("#code-undo-btn").hidden = true;
-    await rescan();
+    state.scan = null;
+    updateChrome();
+    const item = printItem(t("term_folder_opened", { folder: handle.name }), "accent");
+    const sub = addSub(item, t("code_scanning"), "c-dim");
+    const ok = await rescan({ quiet: true });
+    if (ok) {
+      sub.textContent = folderStatsText();
+      sub.parentElement.classList.remove("c-dim");
+      item.dot.className = "term-bullet b-green";
+    } else {
+      sub.textContent = t("code_folder_error");
+      item.dot.className = "term-bullet b-red";
+    }
+    return ok;
   }
 
-  async function rescan({ silent = false } = {}) {
+  function folderStatsText() {
+    if (!state.scan) return "";
+    const s = state.scan.stats;
+    let text = t("code_folder_stats", { files: s.sent, skipped: s.secret + s.ignored + s.big + s.binary });
+    if (s.secret) text += ` · 🔒 ${t("code_secret_skipped", { n: s.secret })}`;
+    return text;
+  }
+
+  async function rescan({ quiet = false } = {}) {
     if (!state.dirHandle || state.scanning) return !!state.scan;
     state.scanning = true;
-    renderFolder();
     try {
       if (!(await ensurePermission(state.dirHandle, "read"))) {
-        toast(t("code_permission_denied"), "error");
+        printError(t("code_permission_denied"));
         return false;
       }
       const result = await scanFolder(state.dirHandle);
       state.scan = { tree: result.tree, files: result.files, stats: result.stats };
       state.snapshot = result.snapshot;
       state.existing = result.existing;
-      if (!silent && result.stats.secret) toast(t("code_secret_skipped", { n: result.stats.secret }), "info", 4500);
+      if (!quiet) addSub(printItem(t("code_rescanned"), "green"), folderStatsText());
       return true;
     } catch (error) {
       if (error && error.code === "too_big") {
-        dialog({ icon: "📦", title: t("code_folder_too_big_title"), text: t("code_folder_too_big"), confirmText: t("understood"), hideCancel: true });
+        printError(t("code_folder_too_big_title"), t("code_folder_too_big"));
         clearFolder();
       } else {
-        toast(t("code_folder_error"), "error");
+        printError(t("code_folder_error"));
       }
       return false;
     } finally {
       state.scanning = false;
-      renderFolder();
+      updateChrome();
     }
   }
 
+  async function rescanCmd() {
+    if (!state.dirHandle) { printLine(t("term_no_folder_open"), "c-dim"); return; }
+    await rescan();
+  }
+
   function clearFolder() {
-    if (state.running) return;
     state.dirHandle = null;
     state.folderName = "";
     state.zipMode = false;
@@ -382,128 +862,86 @@ const PedusCode = (() => {
     state.snapshot = new Map();
     state.existing = new Set();
     state.undo = null;
-    $("#code-undo-btn").hidden = true;
-    renderFolder();
-    updateSaveButtons();
+    updateChrome();
+  }
+
+  function closeFolderCmd() {
+    if (!state.dirHandle && !state.zipMode) { printLine(t("term_no_folder_open"), "c-dim"); return; }
+    clearFolder();
+    printLine(t("term_folder_closed"), "c-dim");
   }
 
   function useZipMode() {
     clearFolder();
     state.zipMode = true;
-    renderFolder();
-    $("#code-task").focus();
+    updateChrome();
+    const item = printItem(t("code_new_project_mode"), "accent");
+    addSub(item, t("code_new_project_stats"), "c-dim");
   }
 
-  /* ------------------------------------------------------------------ */
-  /* Interfaz: uso, bloqueo y ejemplos                                    */
-  /* ------------------------------------------------------------------ */
-  function usage() {
-    return (App.profile && App.profile.code) || null;
-  }
-
-  function renderUsage() {
-    const chip = $("#code-usage");
-    const info = usage();
-    if (!info || !App.hasUltra) { chip.hidden = true; return; }
-    chip.hidden = false;
-    chip.textContent = info.unlimited ? `💻 ${t("code_usage_unlimited")}` : `💻 ${t("code_usage_chip", { used: info.used, limit: info.limit })}`;
-    chip.classList.toggle("ultra", !info.unlimited && info.remaining === 0);
-  }
-
-  function renderAccess() {
-    const locked = !App.hasUltra;
-    $("#code-locked").hidden = !locked;
-    $("#code-setup").hidden = locked;
-    if (locked) {
-      $("#code-progress").hidden = true;
-      $("#code-results").hidden = true;
-    }
-    renderUsage();
-  }
-
-  function renderExamples() {
-    const box = $("#code-examples");
-    box.innerHTML = "";
-    EXAMPLES.forEach((key) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "code-example";
-      button.textContent = t(key);
-      button.addEventListener("click", () => {
-        const input = $("#code-task");
-        input.value = t(key);
-        updateCounter();
-        input.focus();
-      });
-      box.appendChild(button);
+  function listFiles() {
+    if (!state.scan) { printLine(t("term_no_folder_open"), "c-dim"); return; }
+    const item = printItem(`📁 ${state.folderName}`, "accent");
+    const tree = state.scan.tree;
+    const sent = new Set(state.scan.files.map((file) => file.path));
+    const pre = el("div", "term-tree");
+    tree.slice(0, 60).forEach((entry) => {
+      const row = el("div", `term-tree-row${sent.has(entry.path) ? "" : " skipped"}`);
+      row.append(el("span", "term-tree-path", entry.path), el("span", "term-tree-size", formatBytes(entry.size)));
+      pre.appendChild(row);
     });
+    if (tree.length > 60) pre.appendChild(el("div", "term-tree-row skipped", t("term_files_more", { n: tree.length - 60 })));
+    item.subs.appendChild(pre);
+    addSub(item, folderStatsText(), "c-dim");
   }
 
-  function updateCounter() {
-    const length = $("#code-task").value.length;
-    const counter = $("#code-task-counter");
-    counter.textContent = `${length}/${LIMITS.taskChars}`;
-    counter.classList.toggle("char-counter", true);
-    counter.classList.toggle("warn", length > LIMITS.taskChars * 0.9);
-  }
-
-  function setRunning(running) {
-    state.running = running;
-    const button = $("#code-run-btn");
-    button.disabled = running;
-    button.classList.toggle("loading-soft", running);
-    $("#code-cancel-btn").hidden = !running;
-    $("#code-pick-btn").disabled = running || !fsSupported();
-    $("#code-nofolder-btn").disabled = running;
-    $("#code-clear-folder-btn").disabled = running;
-    $("#code-rescan-btn").disabled = running;
-    $("#peduscode-btn").classList.toggle("is-running", running);
-    if (running) {
-      state.startedAt = Date.now();
-      clearInterval(state.timer);
-      state.timer = setInterval(updateTimer, 1000);
-      updateTimer();
-    } else {
-      clearInterval(state.timer);
-      state.timer = null;
-    }
-    document.title = running ? `PedusGPT — ${t("code_working_title")}` : `PedusGPT — ${t("app_tagline")}`;
-    updateSaveButtons();
-  }
-
-  function updateTimer() {
-    $("#code-timer").textContent = `⏱ ${formatSeconds((Date.now() - state.startedAt) / 1000)}`;
-  }
-
-  /* ------------------------------------------------------------------ */
-  /* Ejecución                                                           */
-  /* ------------------------------------------------------------------ */
-  async function run() {
-    if (state.running) return;
-    if (!App.hasUltra) { Settings.openPlanModal(); return; }
-    const task = $("#code-task").value.trim();
-    if (task.length < 3) {
-      toast(t("code_task_short"), "warning");
-      $("#code-task").focus();
-      return;
-    }
+  function usageCmd() {
     const info = usage();
-    if (info && !info.unlimited && info.remaining === 0) { showLimitDialog(); return; }
+    if (!App.hasUltra) { printLocked(); return; }
+    if (!info) { printLine(t("code_error_generic"), "c-red"); return; }
+    if (info.unlimited) printLine(`∞ ${t("code_usage_unlimited")}`, "c-green");
+    else printLine(t("term_usage_line", { used: info.used, limit: info.limit }), info.remaining === 0 ? "c-yellow" : "");
+  }
 
+  function helpCmd() {
+    const item = printItem(t("term_help_title"), "accent");
+    const table = el("div", "term-help");
+    COMMANDS.forEach((cmd) => {
+      const row = el("button", "term-help-row");
+      row.type = "button";
+      row.append(el("span", "term-help-name", `/${cmd.name}`), el("span", "term-help-desc", t(cmd.desc)));
+      row.addEventListener("click", () => { input().value = `/${cmd.name}`; focusInput(); });
+      table.appendChild(row);
+    });
+    item.subs.appendChild(table);
+    addSub(item, t("term_shortcuts"), "c-dim");
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Ejecución de una tarea                                              */
+  /* ------------------------------------------------------------------ */
+  async function runTask(task) {
+    printUser(task);
+    if (!App.hasUltra) { printLocked(); return; }
+    if (state.running || state.saving) { printLine(t("term_busy"), "c-yellow"); return; }
+    if (task.length < 3) { printLine(t("code_task_short"), "c-yellow"); return; }
+    const info = usage();
+    if (info && !info.unlimited && info.remaining === 0) { printLimit(); return; }
+
+    // Sin carpeta: preguntar dónde trabajar
     if (!state.dirHandle && !state.zipMode) {
       if (fsSupported()) {
-        toast(t("code_choose_first"), "info");
-        return;
+        const pick = await choose(t("term_where_question"), [t("term_opt_open_folder"), t("code_new_project"), t("cancel")]);
+        if (pick === 0) { if (!(await pickFolder())) return; }
+        else if (pick === 1) useZipMode();
+        else return;
+      } else {
+        useZipMode();
       }
-      state.zipMode = true;
-      renderFolder();
     }
 
     // Releer la carpeta para trabajar con la versión más reciente
-    if (state.dirHandle) {
-      const ok = await rescan({ silent: true });
-      if (!ok) return;
-    }
+    if (state.dirHandle && !(await rescan({ quiet: true }))) return;
 
     const body = {
       task: task.slice(0, LIMITS.taskChars),
@@ -512,8 +950,14 @@ const PedusCode = (() => {
       files: state.scan ? state.scan.files : [],
     };
 
-    resetRunUI();
+    state.agents.clear();
+    state.results.clear();
+    state.review = null;
+    state.undo = null;
+    state.plannedFiles = 0;
+    state.deliveredFiles = 0;
     setRunning(true);
+    startStatus(t("term_status_planning"));
     const controller = new AbortController();
     state.controller = controller;
 
@@ -521,10 +965,10 @@ const PedusCode = (() => {
     try {
       response = await api("/code/run", { method: "POST", body, raw: true, signal: controller.signal });
     } catch (error) {
+      stopStatus();
       setRunning(false);
       state.controller = null;
-      $("#code-progress").hidden = true;
-      if (error.name === "AbortError") return;
+      if (error.name === "AbortError") { printLine(t("code_cancelled"), "c-dim"); return; }
       handleRequestError(error);
       return;
     }
@@ -550,46 +994,52 @@ const PedusCode = (() => {
         }
       }
     } catch (error) {
-      if (error.name === "AbortError") {
-        markCancelled();
-        finished = true;
-      } else {
-        showPlannerError(t("error_network"));
-        toast(t("error_network"), "error");
-        finished = true;
-      }
+      finished = true;
+      if (error.name === "AbortError") printItem(t("code_cancelled"), "yellow", "⏹");
+      else printError(t("error_network"));
     } finally {
+      stopStatus();
       setRunning(false);
       if (state.controller === controller) state.controller = null;
     }
-    if (!finished) {
-      showPlannerError(t("code_error_generic"));
-      toast(t("code_error_generic"), "error");
-    }
+    if (!finished) printError(t("code_error_generic"));
     finishAgents();
-    renderResults();
+    if (state.results.size) showReview();
   }
 
-  async function cancel() {
-    if (!state.running || !state.controller) return;
-    const ok = await dialog({ icon: "⏹️", title: t("code_cancel_title"), text: t("code_cancel_confirm"), confirmText: t("code_cancel_yes"), danger: true });
-    if (ok && state.controller) state.controller.abort();
+  function setRunning(running) {
+    state.running = running;
+    state.escArmedAt = 0;
+    if (running) state.startedAt = Date.now();
+    $("#peduscode-btn").classList.toggle("is-running", running);
+    $("#term-prompt").classList.toggle("running", running);
+    document.title = running ? `PedusGPT — ${t("code_working_title")}` : `PedusGPT — ${t("app_tagline")}`;
+    updateChrome();
   }
 
-  function markCancelled() {
-    setPlanner("error", t("code_cancelled"));
-    toast(t("code_cancelled"), "info");
+  /** Esc o Ctrl+C dos veces seguidas cancelan la ejecución */
+  function requestCancel() {
+    if (!state.running || !state.controller) return false;
+    const now = Date.now();
+    if (now - state.escArmedAt < 2500) {
+      state.escArmedAt = 0;
+      state.controller.abort();
+    } else {
+      state.escArmedAt = now;
+      renderStatus();
+    }
+    return true;
   }
 
   function handleRequestError(error) {
-    if (error.code === "needs_max") { Settings.openPlanModal(); return; }
+    if (error.code === "needs_max") { printLocked(); return; }
     if (error.code === "rate_limit") {
       if (App.profile && App.profile.code) {
         App.profile.code.remaining = 0;
         App.profile.code.used = App.profile.code.limit;
       }
       renderUsage();
-      showLimitDialog();
+      printLimit();
       return;
     }
     const messages = {
@@ -600,12 +1050,7 @@ const PedusCode = (() => {
       too_many_requests: "rate_limit_general",
       network: "error_network",
     };
-    toast(t(messages[error.code] || "code_error_generic"), "error", 6000);
-  }
-
-  function showLimitDialog() {
-    const limit = (usage() && usage().limit) || (App.config && App.config.peduscode_daily_limit) || 3;
-    dialog({ icon: "⏳", title: t("code_limit_title"), text: t("code_limit_text", { limit }), confirmText: t("understood"), hideCancel: true });
+    printError(t(messages[error.code] || "code_error_generic"));
   }
 
   /** Procesa un evento del servidor. Devuelve true si es un evento final. */
@@ -616,11 +1061,11 @@ const PedusCode = (() => {
           App.profile.code = { ...(App.profile.code || {}), ...event.usage };
           renderUsage();
         }
-        setPlanner("working", t("code_planner_working"));
         return false;
       case "planner":
-        if (event.status === "waiting") setPlanner("waiting", `${t("code_planner_working")} · ${t("code_waiting", { s: Math.ceil(event.seconds || 1) })}`);
-        else setPlanner("working", t("code_planner_working"));
+        setStatus(event.status === "waiting"
+          ? `${t("term_status_planning")} · ${t("code_waiting", { s: Math.ceil(event.seconds || 1) })}`
+          : t("term_status_planning"));
         return false;
       case "plan":
         renderPlan(event);
@@ -631,16 +1076,16 @@ const PedusCode = (() => {
       case "file":
         addResult(event);
         return false;
-      case "refused":
-        setPlanner("error", t("code_refused_title"));
-        dialog({ icon: "🙅", title: t("code_refused_title"), text: event.message || "", confirmText: t("understood"), hideCancel: true });
-        if (event.refunded) refundLocal();
+      case "refused": {
+        const item = printError(t("code_refused_title"), event.message || "");
+        if (event.refunded) refundLocal(item);
         return true;
-      case "error":
-        showPlannerError(event.message || t("code_error_generic"));
-        toast(event.message || t("code_error_generic"), "error", 6000);
-        if (event.refunded) refundLocal();
+      }
+      case "error": {
+        const item = printError(event.message || t("code_error_generic"));
+        if (event.refunded) refundLocal(item);
         return true;
+      }
       case "done":
         onDone(event);
         return true;
@@ -649,117 +1094,71 @@ const PedusCode = (() => {
     }
   }
 
-  function refundLocal() {
+  function refundLocal(item) {
     const info = usage();
     if (info && !info.unlimited && info.used > 0) {
       info.used -= 1;
       info.remaining = Math.max(0, info.limit - info.used);
     }
     renderUsage();
-    toast(t("code_refunded"), "info", 4500);
+    if (item) addSub(item, t("code_refunded"), "c-dim");
   }
 
   function onDone(event) {
+    stopStatus();
     const files = event.files || 0;
-    if (files > 0) {
-      setPlanner("done", t("code_done", { n: files, s: Math.round(event.seconds || 0) }));
-      toast(t("code_done", { n: files, s: Math.round(event.seconds || 0) }), "success", 5000);
-    } else {
-      setPlanner("error", t("code_no_files"));
-      toast(t("code_no_files"), "warning", 6000);
-    }
+    const seconds = Math.round(event.seconds || 0);
+    const item = files > 0
+      ? printItem(t("code_done", { n: files, s: seconds }), "green")
+      : printItem(t("code_no_files"), "yellow");
     if (event.failed && event.failed.length) {
       const names = event.failed.map((id) => {
         const agent = state.agents.get(id);
         return agent ? agent.data.name : `#${id}`;
       });
-      toast(t("code_failed_some", { names: names.join(", ") }), "warning", 6000);
+      addSub(item, t("code_failed_some", { names: names.join(", ") }), "c-yellow");
     }
-    if (event.refunded) refundLocal();
-    $("#code-results").hidden = state.results.size === 0;
-    if (state.results.size) {
-      requestAnimationFrame(() => $("#code-results").scrollIntoView({ behavior: "smooth", block: "start" }));
-    }
+    if (event.refunded) refundLocal(item);
   }
 
   /* ------------------------------------------------------------------ */
-  /* Interfaz: organizador y agentes                                     */
+  /* Organizador y agentes                                               */
   /* ------------------------------------------------------------------ */
-  function resetRunUI() {
-    state.agents.clear();
-    state.results.clear();
-    state.undo = null;
-    state.plannerDone = false;
-    $("#code-undo-btn").hidden = true;
-    $("#code-agents").innerHTML = "";
-    $("#code-file-list").innerHTML = "";
-    $("#code-summary").hidden = true;
-    $("#code-results").hidden = true;
-    $("#code-progress").hidden = false;
-    $("#code-timer").textContent = "";
-    setPlanner("working", t("code_connecting"));
-    requestAnimationFrame(() => $("#code-progress").scrollIntoView({ behavior: "smooth", block: "start" }));
-  }
-
-  function setPlanner(status, text) {
-    const box = $("#code-planner");
-    box.className = `code-planner status-${status}`;
-    const icon = status === "done" ? Icons.check : status === "error" ? Icons.alert : '<span class="spinner"></span>';
-    box.innerHTML = `<span class="code-planner-icon">${icon}</span><span class="code-planner-text"></span>`;
-    box.querySelector(".code-planner-text").textContent = text;
-  }
-
-  function showPlannerError(message) {
-    setPlanner("error", message);
-  }
-
   function renderPlan(plan) {
-    state.plannerDone = true;
     const agents = plan.agents || [];
-    const totalFiles = agents.reduce((sum, agent) => sum + (agent.files || []).length, 0);
-    setPlanner("done", t("code_plan_ready", { agents: agents.length, files: totalFiles }));
-    const summary = $("#code-summary");
-    summary.textContent = plan.summary || "";
-    summary.hidden = !plan.summary;
+    state.plannedFiles = agents.reduce((sum, agent) => sum + (agent.files || []).length, 0);
+    const planItem = printItem(plan.summary || t("term_plan"), "accent");
+    addSub(planItem, t("code_plan_ready", { agents: agents.length, files: state.plannedFiles }), "c-dim");
 
-    const container = $("#code-agents");
-    container.innerHTML = "";
-    agents.forEach((agent, index) => {
-      const card = document.createElement("article");
-      card.className = "agent-card status-queued";
-      card.style.animationDelay = `${index * 60}ms`;
-      card.innerHTML = `
-        <div class="agent-head">
-          <span class="agent-emoji"></span>
-          <div class="agent-title"><strong></strong><span class="agent-role"></span></div>
-        </div>
-        <div class="agent-status"><span class="agent-dot"></span><span class="agent-status-text"></span></div>
-        <ul class="agent-files"></ul>
-        <p class="agent-notes" hidden></p>`;
-      card.querySelector(".agent-emoji").textContent = agent.emoji || "🤖";
-      card.querySelector("strong").textContent = agent.name || `#${agent.id}`;
-      card.querySelector(".agent-role").textContent = agent.role || "";
-      const list = card.querySelector(".agent-files");
+    agents.forEach((agent) => {
+      const item = printItem("", "queued");
+      item.root.classList.add("term-agent");
+      item.label.append(el("span", "term-agent-name", `${agent.emoji || "🤖"} ${agent.name || `#${agent.id}`}`));
+      if (agent.role) item.label.append(el("span", "term-dim", ` · ${agent.role}`));
+      const statusEl = addSub(item, t("code_agent_queued"), "term-agent-status");
+      const filesEl = el("div", "term-agent-files");
       (agent.files || []).forEach((file) => {
-        const li = document.createElement("li");
-        li.dataset.path = file.path;
-        li.title = file.purpose || "";
-        li.innerHTML = `<span class="agent-file-badge ${file.action === "edit" ? "edit" : "create"}"></span><span class="agent-file-path"></span>`;
-        li.querySelector(".agent-file-badge").textContent = file.action === "edit" ? "M" : "+";
-        li.querySelector(".agent-file-path").textContent = file.path;
-        list.appendChild(li);
+        const fileChip = el("span", `term-fchip ${file.action === "edit" ? "edit" : "create"}`);
+        fileChip.dataset.path = file.path;
+        fileChip.title = file.purpose || "";
+        fileChip.append(el("span", "term-fchip-sym", file.action === "edit" ? "~" : "+"), el("span", "term-fchip-path", file.path), el("span", "term-fchip-stat"));
+        filesEl.appendChild(fileChip);
       });
-      container.appendChild(card);
-      const entry = { data: agent, el: card, status: "queued" };
-      state.agents.set(agent.id, entry);
-      setAgentStatus(entry, "queued", t("code_agent_queued"));
+      item.subs.appendChild(filesEl);
+      const notesEl = el("div", "term-sub term-agent-notes");
+      notesEl.hidden = true;
+      item.subs.appendChild(notesEl);
+      state.agents.set(agent.id, { data: agent, item, statusEl, filesEl, notesEl, status: "queued" });
     });
+    setStatus(t("term_status_working", { done: 0, total: state.plannedFiles }));
+    scrollDown();
   }
 
   function setAgentStatus(entry, status, text) {
     entry.status = status;
-    entry.el.className = `agent-card status-${status}`;
-    entry.el.querySelector(".agent-status-text").textContent = text;
+    entry.item.dot.className = `term-bullet b-${status}`;
+    entry.statusEl.textContent = text;
+    entry.statusEl.parentElement.classList.toggle("c-red", status === "error");
   }
 
   function updateAgent(event) {
@@ -767,7 +1166,7 @@ const PedusCode = (() => {
     if (!entry) return;
     switch (event.status) {
       case "working":
-        setAgentStatus(entry, "working", event.chars ? t("code_agent_writing", { n: event.chars.toLocaleString(I18n.locale()) }) : t("code_agent_thinking"));
+        setAgentStatus(entry, "working", event.chars ? t("code_agent_writing", { n: formatNumber(event.chars) }) : t("code_agent_thinking"));
         break;
       case "waiting":
         setAgentStatus(entry, "waiting", t("code_waiting", { s: Math.ceil(event.seconds || 1) }));
@@ -777,9 +1176,8 @@ const PedusCode = (() => {
         const notes = [];
         if (event.notes) notes.push(event.notes);
         if (event.missing && event.missing.length) notes.push(t("code_agent_missing", { files: event.missing.join(", ") }));
-        const notesEl = entry.el.querySelector(".agent-notes");
-        notesEl.textContent = notes.join(" · ");
-        notesEl.hidden = !notes.length;
+        entry.notesEl.textContent = notes.join(" · ");
+        entry.notesEl.hidden = !notes.length;
         break;
       }
       case "error":
@@ -788,6 +1186,7 @@ const PedusCode = (() => {
       default:
         break;
     }
+    scrollDown();
   }
 
   /** Al terminar, ningún agente se queda "trabajando" en pantalla */
@@ -798,8 +1197,17 @@ const PedusCode = (() => {
   }
 
   /* ------------------------------------------------------------------ */
-  /* Resultados                                                           */
+  /* Resultados y revisión                                               */
   /* ------------------------------------------------------------------ */
+  function lineStats(result) {
+    if (result.original === null) return { add: normalizeNewlines(result.content).split("\n").length, del: 0, ops: null };
+    const ops = diffLines(normalizeNewlines(result.original), normalizeNewlines(result.content));
+    let add = 0;
+    let del = 0;
+    ops.forEach(([op]) => { if (op === "+") add += 1; else if (op === "-") del += 1; });
+    return { add, del, ops };
+  }
+
   function addResult(event) {
     const path = safePath(event.path);
     if (!path) return;
@@ -812,7 +1220,6 @@ const PedusCode = (() => {
     if (SCRIPT_EXT.has(extension(path))) flags.push("script");
     if (exists && original === null) flags.push("unread");
     const identical = original !== null && normalizeNewlines(original) === normalizeNewlines(content);
-
     const result = {
       path,
       content,
@@ -824,98 +1231,132 @@ const PedusCode = (() => {
       selected: !flags.includes("truncated") && !flags.includes("shorter") && !identical,
       saved: false,
     };
+    result.stats = lineStats(result);
     state.results.set(path, result);
+    state.deliveredFiles += 1;
 
+    // Marcar el archivo en la tarjeta del agente
     const entry = state.agents.get(event.agent_id);
     if (entry) {
-      const li = entry.el.querySelector(`.agent-files li[data-path="${CSS.escape(event.path)}"]`);
-      if (li) li.classList.add("delivered");
+      let fileChip = Array.from(entry.filesEl.children).find((node) => node.dataset.path === event.path || node.dataset.path === path);
+      if (!fileChip) {
+        fileChip = el("span", "term-fchip");
+        fileChip.dataset.path = path;
+        fileChip.append(el("span", "term-fchip-sym", "+"), el("span", "term-fchip-path", path), el("span", "term-fchip-stat"));
+        entry.filesEl.appendChild(fileChip);
+      }
+      fileChip.classList.add("done");
+      if (event.truncated) fileChip.classList.add("warn");
+      fileChip.querySelector(".term-fchip-sym").textContent = event.truncated ? "!" : "✓";
+      fileChip.querySelector(".term-fchip-stat").textContent = ` +${result.stats.add}${result.stats.del ? ` −${result.stats.del}` : ""}`;
     }
-    $("#code-results").hidden = false;
-    renderResults();
+    setStatus(t("term_status_working", { done: state.deliveredFiles, total: Math.max(state.plannedFiles, state.deliveredFiles) }));
   }
 
-  function lineStats(result) {
-    if (result.original === null) return { add: normalizeNewlines(result.content).split("\n").length, del: 0 };
-    const ops = diffLines(normalizeNewlines(result.original), normalizeNewlines(result.content));
-    let add = 0;
-    let del = 0;
-    ops.forEach(([op]) => { if (op === "+") add += 1; else if (op === "-") del += 1; });
-    return { add, del, ops };
+  function selectedResults() {
+    return Array.from(state.results.values()).filter((result) => result.selected && !result.saved);
   }
 
-  function renderResults() {
-    const list = $("#code-file-list");
-    const openPaths = new Set($$(".code-file.open", list).map((el) => el.dataset.path));
+  function pendingResults() {
+    return Array.from(state.results.values()).filter((result) => !result.saved);
+  }
+
+  function showReview() {
+    const box = el("div", "term-review");
+    const head = el("div", "term-review-head");
+    head.append(el("span", "term-review-title", t("code_step_review")), el("span", "term-dim", ` · ${t("term_review_hint")}`));
+    box.appendChild(head);
+    box.appendChild(el("div", "term-review-list"));
+    state.review = box;
+    append(box);
+    renderReviewRows();
+    showSaveChoice();
+  }
+
+  function renderReviewRows() {
+    if (!state.review) return;
+    const list = state.review.querySelector(".term-review-list");
+    const open = new Set(Array.from(list.querySelectorAll(".term-file.open")).map((row) => row.dataset.path));
     list.innerHTML = "";
-    const results = Array.from(state.results.values()).sort((a, b) => a.path.localeCompare(b.path));
-    results.forEach((result) => {
-      if (!result.stats) result.stats = lineStats(result);
-      const row = document.createElement("div");
-      row.className = `code-file${result.selected ? " selected" : ""}${result.saved ? " saved" : ""}`;
-      row.dataset.path = result.path;
-      row.innerHTML = `
-        <div class="code-file-head">
-          <input type="checkbox" class="code-file-check" />
-          <button type="button" class="code-file-toggle">
-            <span class="code-file-chevron">${Icons.chevron}</span>
-            <span class="code-file-path"></span>
-          </button>
-          <span class="code-file-badge"></span>
-          <span class="code-file-lines"><span class="add"></span> <span class="del"></span></span>
-        </div>
-        <div class="code-file-flags"></div>
-        <div class="code-file-preview" hidden></div>`;
-      const check = row.querySelector(".code-file-check");
-      check.checked = result.selected;
-      check.disabled = state.running || state.saving;
-      check.setAttribute("aria-label", result.path);
-      check.addEventListener("change", () => {
-        result.selected = check.checked;
-        row.classList.toggle("selected", check.checked);
-        updateSaveButtons();
-      });
-      row.querySelector(".code-file-path").textContent = result.path;
-      const badge = row.querySelector(".code-file-badge");
-      badge.textContent = result.saved ? t("code_badge_saved") : result.action === "edit" ? t("code_badge_edit") : t("code_badge_new");
-      badge.classList.add(result.saved ? "saved" : result.action);
-      row.querySelector(".code-file-lines .add").textContent = `+${result.stats.add}`;
-      row.querySelector(".code-file-lines .del").textContent = result.stats.del ? `−${result.stats.del}` : "";
+    Array.from(state.results.values()).sort((a, b) => a.path.localeCompare(b.path)).forEach((result) => {
+      const wrap = el("div", `term-file${result.saved ? " saved" : ""}`);
+      wrap.dataset.path = result.path;
+      const row = el("div", "term-file-row");
 
-      const flagsBox = row.querySelector(".code-file-flags");
+      const check = el("button", `term-check${result.selected ? " on" : ""}`, result.saved ? "[✓]" : result.selected ? "[x]" : "[ ]");
+      check.type = "button";
+      check.disabled = result.saved || state.running || state.saving;
+      check.setAttribute("aria-pressed", result.selected ? "true" : "false");
+      check.setAttribute("aria-label", result.path);
+      check.addEventListener("click", () => {
+        result.selected = !result.selected;
+        renderReviewRows();
+        updateSaveQuestion();
+      });
+
+      const name = el("button", "term-fname");
+      name.type = "button";
+      name.append(el("span", "term-fname-arrow", "▸"), el("span", "term-fname-path", result.path));
+      name.addEventListener("click", () => toggleDiff(wrap, result));
+
+      const badgeKey = result.saved ? "code_badge_saved" : result.action === "edit" ? "code_badge_edit" : "code_badge_new";
+      const badge = el("span", `term-badge ${result.saved ? "saved" : result.action}`, t(badgeKey));
+      const stats = el("span", "term-fstat");
+      stats.append(el("span", "c-green", `+${result.stats.add}`));
+      if (result.stats.del) stats.append(el("span", "c-red", ` −${result.stats.del}`));
+      row.append(check, name, badge, stats);
+      wrap.appendChild(row);
+
       const flagTexts = result.flags.map((flag) => t(`code_flag_${flag}`));
       if (result.identical) flagTexts.push(t("code_identical"));
-      flagTexts.forEach((text) => {
-        const flag = document.createElement("span");
-        flag.className = "code-flag";
-        flag.innerHTML = Icons.alert;
-        flag.appendChild(document.createTextNode(text));
-        flagsBox.appendChild(flag);
-      });
-      flagsBox.hidden = !flagTexts.length;
+      flagTexts.forEach((text) => wrap.appendChild(el("div", "term-flag", `⚠ ${text}`)));
 
-      row.querySelector(".code-file-toggle").addEventListener("click", () => togglePreview(row, result));
-      list.appendChild(row);
-      if (openPaths.has(result.path)) togglePreview(row, result);
+      const diff = el("div", "term-diff");
+      diff.hidden = true;
+      wrap.appendChild(diff);
+      list.appendChild(wrap);
+      if (open.has(result.path)) toggleDiff(wrap, result);
     });
-
-    const selectedCount = results.filter((r) => r.selected).length;
-    $("#code-results-count").textContent = t("code_files_count", { n: results.length });
-    const selectAll = $("#code-select-all");
-    selectAll.checked = results.length > 0 && selectedCount === results.length;
-    selectAll.indeterminate = selectedCount > 0 && selectedCount < results.length;
-    selectAll.disabled = state.running || state.saving;
-    updateSaveButtons();
   }
 
-  function togglePreview(row, result) {
-    const preview = row.querySelector(".code-file-preview");
-    const open = !row.classList.contains("open");
-    row.classList.toggle("open", open);
-    preview.hidden = !open;
-    if (open && !preview.dataset.ready) {
-      preview.innerHTML = buildPreview(result);
-      preview.dataset.ready = "1";
+  function toggleDiff(wrap, result) {
+    const diff = wrap.querySelector(".term-diff");
+    const opening = !wrap.classList.contains("open");
+    wrap.classList.toggle("open", opening);
+    wrap.querySelector(".term-fname-arrow").textContent = opening ? "▾" : "▸";
+    diff.hidden = !opening;
+    if (opening && !diff.dataset.ready) {
+      diff.innerHTML = buildPreview(result);
+      diff.dataset.ready = "1";
+    }
+  }
+
+  function saveQuestion() {
+    const n = selectedResults().length;
+    return state.dirHandle ? t("term_save_question", { n, folder: state.folderName }) : t("term_zip_question", { n });
+  }
+
+  function updateSaveQuestion() {
+    if (state.choice && state.choice.kind === "save") state.choice.questionEl.textContent = saveQuestion();
+  }
+
+  async function showSaveChoice() {
+    if (!pendingResults().length) return;
+    const options = state.dirHandle
+      ? [t("term_opt_save"), t("code_download_zip"), t("term_opt_later")]
+      : [t("code_download_zip"), t("term_opt_later")];
+    const promise = choose(saveQuestion(), options);
+    if (state.choice) state.choice.kind = "save";
+    const pick = await promise;
+    if (pick === -1) return;
+    if (state.dirHandle) {
+      if (pick === 0) await save();
+      else if (pick === 1) await downloadZip();
+      else printLine(t("term_later"), "c-dim");
+    } else if (pick === 0) {
+      await downloadZip();
+    } else {
+      printLine(t("term_later"), "c-dim");
     }
   }
 
@@ -959,58 +1400,45 @@ const PedusCode = (() => {
     return ops;
   }
 
+  /** Vista de cambios con números de línea, como en un editor */
   function buildPreview(result) {
     const lines = [];
     let shown = 0;
-    const push = (cls, sign, text) => {
+    const push = (cls, number, sign, text) => {
       if (shown >= LIMITS.maxPreviewLines) return;
-      lines.push(`<div class="dl ${cls}"><span class="dl-sign">${sign}</span><span class="dl-text">${escapeHtml(text) || " "}</span></div>`);
+      lines.push(`<div class="dl ${cls}"><span class="dl-num">${number}</span><span class="dl-sign">${sign}</span><span class="dl-text">${escapeHtml(text) || " "}</span></div>`);
       shown += 1;
     };
+    const gap = (n) => lines.push(`<div class="dl dl-gap">··· ${escapeHtml(t("code_unchanged_lines", { n }))} ···</div>`);
 
     if (result.original === null) {
-      normalizeNewlines(result.content).split("\n").forEach((line) => push("dl-add", "+", line));
+      normalizeNewlines(result.content).split("\n").forEach((line, index) => push("dl-add", index + 1, "+", line));
     } else if (result.identical) {
-      return `<p class="code-preview-note">${escapeHtml(t("code_identical"))}</p>`;
+      return `<div class="dl dl-gap">${escapeHtml(t("code_identical"))}</div>`;
     } else {
-      const ops = (result.stats && result.stats.ops) || diffLines(normalizeNewlines(result.original), normalizeNewlines(result.content));
+      const ops = result.stats.ops || diffLines(normalizeNewlines(result.original), normalizeNewlines(result.content));
       const context = 3;
-      // Marca qué líneas sin cambios quedan cerca de un cambio
       const keep = new Uint8Array(ops.length);
       ops.forEach(([op], index) => {
         if (op === " ") return;
         for (let k = Math.max(0, index - context); k <= Math.min(ops.length - 1, index + context); k += 1) keep[k] = 1;
       });
+      let oldLine = 0;
+      let newLine = 0;
       let hidden = 0;
       ops.forEach(([op, text], index) => {
+        if (op !== "+") oldLine += 1;
+        if (op !== "-") newLine += 1;
         if (op === " " && !keep[index]) { hidden += 1; return; }
-        if (hidden) {
-          lines.push(`<div class="dl dl-gap">··· ${escapeHtml(t("code_unchanged_lines", { n: hidden }))} ···</div>`);
-          hidden = 0;
-        }
-        push(op === "+" ? "dl-add" : op === "-" ? "dl-del" : "dl-ctx", op === " " ? " " : op === "-" ? "−" : "+", text);
+        if (hidden) { gap(hidden); hidden = 0; }
+        if (op === "+") push("dl-add", newLine, "+", text);
+        else if (op === "-") push("dl-del", oldLine, "-", text);
+        else push("dl-ctx", newLine, " ", text);
       });
-      if (hidden) lines.push(`<div class="dl dl-gap">··· ${escapeHtml(t("code_unchanged_lines", { n: hidden }))} ···</div>`);
+      if (hidden) gap(hidden);
     }
     if (shown >= LIMITS.maxPreviewLines) lines.push(`<div class="dl dl-gap">··· ${escapeHtml(t("code_preview_cut"))} ···</div>`);
     return `<div class="code-diff">${lines.join("")}</div>`;
-  }
-
-  function selectedResults() {
-    return Array.from(state.results.values()).filter((result) => result.selected);
-  }
-
-  function updateSaveButtons() {
-    const any = selectedResults().length > 0;
-    const busy = state.running || state.saving;
-    const save = $("#code-save-btn");
-    save.hidden = !state.dirHandle;
-    save.disabled = busy || !any;
-    $("#code-zip-btn").disabled = busy || !any;
-    $("#code-zip-btn").classList.toggle("btn-primary", !state.dirHandle);
-    $("#code-zip-btn").classList.toggle("btn-secondary", !!state.dirHandle);
-    $("#code-undo-btn").disabled = busy;
-    $("#code-new-btn").disabled = busy;
   }
 
   /* ------------------------------------------------------------------ */
@@ -1018,16 +1446,13 @@ const PedusCode = (() => {
   /* ------------------------------------------------------------------ */
   async function save() {
     const chosen = selectedResults();
-    if (!chosen.length) { toast(t("code_nothing_selected"), "warning"); return; }
-    if (!state.dirHandle) { downloadZip(); return; }
-    if (!(await ensurePermission(state.dirHandle, "readwrite"))) {
-      toast(t("code_permission_denied"), "error");
-      return;
-    }
+    if (!chosen.length) { printLine(t("code_nothing_selected"), "c-yellow"); return; }
+    if (!state.dirHandle) { await downloadZip(); return; }
+    if (!(await ensurePermission(state.dirHandle, "readwrite"))) { printError(t("code_permission_denied")); return; }
     state.saving = true;
-    updateSaveButtons();
+    renderReviewRows();
     try {
-      // 1) Leer el estado actual para detectar cambios hechos mientras tanto
+      // 1) Detectar cambios hechos en la carpeta desde que se leyó
       const current = new Map();
       const conflicts = [];
       for (const result of chosen) {
@@ -1037,57 +1462,61 @@ const PedusCode = (() => {
         if (now !== null && now !== before) conflicts.push(result.path);
       }
       if (conflicts.length) {
-        const ok = await dialog({
-          icon: "⚠️",
-          title: t("code_conflict_title"),
-          text: `${t("code_conflict_text", { n: conflicts.length })}\n\n${conflicts.slice(0, 6).join("\n")}${conflicts.length > 6 ? "\n…" : ""}`,
-          confirmText: t("code_overwrite"),
-          danger: true,
-        });
-        if (!ok) return;
+        const details = [t("code_conflict_text", { n: conflicts.length }), ...conflicts.slice(0, 8).map((p) => `  • ${p}`)];
+        if (conflicts.length > 8) details.push(`  ${t("term_files_more", { n: conflicts.length - 8 })}`);
+        const pick = await choose(t("code_conflict_title"), [t("code_overwrite"), t("cancel")], { details, danger: true });
+        if (pick !== 0) { printLine(t("term_save_cancelled"), "c-dim"); return; }
       }
 
-      // 2) Escribir guardando copia para poder deshacer
+      // 2) Escribir guardando una copia para poder deshacer
       const backups = [];
-      let failed = 0;
+      const failed = [];
       for (const result of chosen) {
         const before = current.get(result.path);
         let content = result.content;
-        // Respetar los saltos de línea de Windows si el archivo original los usaba
+        // Respetar los saltos de línea de Windows si el original los usaba
         if (before && before.includes("\r\n") && !content.includes("\r\n")) content = content.replace(/\n/g, "\r\n");
         try {
           await writeFileTo(result.path, content);
-          backups.push({ path: result.path, existed: before !== null, original: before });
+          backups.push({ path: result.path, existed: before !== null, original: before, result });
           result.saved = true;
-          result.selected = false;
           state.snapshot.set(result.path, content);
           state.existing.add(result.path);
         } catch (_) {
-          failed += 1;
+          failed.push(result.path);
         }
       }
       if (backups.length) {
         state.undo = backups;
-        $("#code-undo-btn").hidden = false;
-        toast(t("code_saved", { n: backups.length, folder: state.folderName }), "success", 5000);
+        const item = printItem(t("code_saved", { n: backups.length, folder: state.folderName }), "green");
+        backups.forEach(({ result }) => {
+          const stats = `+${result.stats.add}${result.stats.del ? ` −${result.stats.del}` : ""}`;
+          addSub(item, `${result.action === "edit" ? "Update" : "Write"}(${result.path})  ${stats}`);
+        });
+        addSub(item, t("term_undo_hint"), "c-dim");
       }
-      if (failed) toast(t("code_save_errors", { n: failed }), "error", 6000);
-      Array.from(state.results.values()).forEach((result) => { result.stats = null; });
+      if (failed.length) printError(t("code_save_errors", { n: failed.length }), failed.join(", "));
     } catch (_) {
-      toast(t("code_folder_error"), "error");
+      printError(t("code_folder_error"));
     } finally {
       state.saving = false;
-      renderResults();
+      renderReviewRows();
     }
   }
 
-  async function undo() {
-    if (!state.undo || !state.undo.length || !state.dirHandle) return;
-    const ok = await dialog({ icon: "↩️", title: t("code_undo"), text: t("code_undo_confirm"), confirmText: t("code_undo") });
-    if (!ok) return;
-    if (!(await ensurePermission(state.dirHandle, "readwrite"))) { toast(t("code_permission_denied"), "error"); return; }
+  function saveCmd() {
+    if (!pendingResults().length) { printLine(t("term_nothing_to_save"), "c-dim"); return; }
+    if (!state.review) showReview();
+    else showSaveChoice();
+  }
+
+  async function undoCmd() {
+    if (!state.undo || !state.undo.length || !state.dirHandle) { printLine(t("term_nothing_to_undo"), "c-dim"); return; }
+    const pick = await choose(`${t("code_undo")}?`, [t("code_undo"), t("cancel")], { details: [t("code_undo_confirm")] });
+    if (pick !== 0) return;
+    if (!(await ensurePermission(state.dirHandle, "readwrite"))) { printError(t("code_permission_denied")); return; }
     state.saving = true;
-    updateSaveButtons();
+    const item = printItem(t("code_undone"), "green");
     let failed = 0;
     try {
       for (const backup of [...state.undo].reverse()) {
@@ -1095,10 +1524,12 @@ const PedusCode = (() => {
           if (backup.existed) {
             await writeFileTo(backup.path, backup.original);
             state.snapshot.set(backup.path, backup.original);
+            addSub(item, `Restore(${backup.path})`);
           } else {
             await removeFile(backup.path);
             state.snapshot.delete(backup.path);
             state.existing.delete(backup.path);
+            addSub(item, `Delete(${backup.path})`);
           }
           const result = state.results.get(backup.path);
           if (result) { result.saved = false; result.selected = true; }
@@ -1107,123 +1538,222 @@ const PedusCode = (() => {
         }
       }
       state.undo = null;
-      $("#code-undo-btn").hidden = true;
-      if (failed) toast(t("code_save_errors", { n: failed }), "error");
-      else toast(t("code_undone"), "success");
+      if (failed) {
+        item.dot.className = "term-bullet b-red";
+        addSub(item, t("code_save_errors", { n: failed }), "c-red");
+      }
     } finally {
       state.saving = false;
-      Array.from(state.results.values()).forEach((result) => { result.stats = null; });
-      renderResults();
+      renderReviewRows();
     }
+  }
+
+  async function zipCmd() {
+    if (!state.results.size) { printLine(t("term_nothing_to_save"), "c-dim"); return; }
+    await downloadZip();
   }
 
   async function downloadZip() {
     const chosen = selectedResults().length ? selectedResults() : Array.from(state.results.values());
-    if (!chosen.length) { toast(t("code_nothing_selected"), "warning"); return; }
-    if (typeof window.JSZip !== "function") { toast(t("code_zip_error"), "error"); return; }
+    if (!chosen.length) { printLine(t("code_nothing_selected"), "c-yellow"); return; }
+    if (typeof window.JSZip !== "function") { printError(t("code_zip_error")); return; }
     try {
       const zip = new window.JSZip();
-      const root = slug(state.folderName || $("#code-task").value.split(/\s+/).slice(0, 5).join(" "));
+      const lastTask = state.history.filter((entry) => !entry.startsWith("/")).pop() || "";
+      const root = slug(state.folderName || lastTask.split(/\s+/).slice(0, 5).join(" "));
       const folder = zip.folder(root);
       chosen.forEach((result) => folder.file(result.path, result.content));
       const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
-      Exporter.download(blob, `peduscode-${root}.zip`);
-      toast(t("code_zip_ready"), "success");
+      const filename = `peduscode-${root}.zip`;
+      Exporter.download(blob, filename);
+      const item = printItem(t("code_zip_ready"), "green");
+      addSub(item, `${filename} · ${t("code_files_count", { n: chosen.length })}`, "c-dim");
     } catch (_) {
-      toast(t("code_zip_error"), "error");
+      printError(t("code_zip_error"));
     }
   }
 
-  function newTask() {
-    if (state.running) return;
-    state.results.clear();
-    state.agents.clear();
-    state.undo = null;
-    $("#code-undo-btn").hidden = true;
-    $("#code-progress").hidden = true;
-    $("#code-results").hidden = true;
-    $("#code-file-list").innerHTML = "";
-    $("#code-agents").innerHTML = "";
-    $("#code-task").value = "";
-    updateCounter();
-    $("#code-scroll").scrollTo({ top: 0, behavior: "smooth" });
-    $("#code-task").focus();
+  /* ------------------------------------------------------------------ */
+  /* Navegación y ciclo de vida                                          */
+  /* ------------------------------------------------------------------ */
+  function showSection() {
+    if (typeof App.showSection === "function") {
+      App.showSection("code");
+      return;
+    }
+    // Respaldo por si app.js es de una versión anterior
+    $("#chat-area").hidden = true;
+    $("#code-area").hidden = false;
+    $("#peduscode-btn").classList.add("active");
   }
 
-  /* ------------------------------------------------------------------ */
-  /* Navegación                                                          */
-  /* ------------------------------------------------------------------ */
   function open() {
-    App.showSection("code");
-    Sidebar.closeMobile();
-    renderAccess();
-    renderFolder();
+    showSection();
+    if (typeof Sidebar !== "undefined") Sidebar.closeMobile();
     if (location.hash !== "#/code") history.replaceState(null, "", "#/code");
+    renderAccess();
     if (App.hasUltra) {
       api("/code/usage").then((data) => {
         if (App.profile) App.profile.code = { ...(App.profile.code || {}), ...data };
         renderUsage();
       }).catch(() => {});
-      if (!state.running) setTimeout(() => $("#code-task").focus({ preventScroll: true }), 80);
     }
+    scrollDown(true);
+    setTimeout(focusInput, 60);
+  }
+
+  /** Muestra la bienvenida o el bloqueo según el plan del usuario */
+  function renderAccess() {
+    if (!state.initialized || !App.profile) return;
+    const locked = !App.hasUltra;
+    if (state.lockedShown !== locked) {
+      if (state.pristine || !output().children.length) {
+        output().innerHTML = "";
+        printWelcome();
+      } else if (locked) {
+        printLocked();
+      }
+      state.lockedShown = locked;
+    }
+    updateChrome();
+  }
+
+  /** Esc fuera del cuadro de texto (lo llama el gestor global de atajos) */
+  function handleEscape() {
+    if ($("#code-area").hidden) return false;
+    if (state.choice) { state.choice.finish(state.choice.count - 1); return true; }
+    if (!$("#term-suggest").hidden) { hideSuggest(); return true; }
+    return requestCancel();
+  }
+
+  function setupDragAndDrop() {
+    const body = $("#term-body");
+    const overlay = $("#term-drop");
+    const hasFiles = (event) => Array.from((event.dataTransfer && event.dataTransfer.types) || []).includes("Files");
+    body.addEventListener("dragover", (event) => {
+      if (!hasFiles(event) || !App.hasUltra) return;
+      event.preventDefault();
+      overlay.hidden = false;
+    });
+    body.addEventListener("dragleave", (event) => {
+      if (!body.contains(event.relatedTarget)) overlay.hidden = true;
+    });
+    body.addEventListener("drop", (event) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      overlay.hidden = true;
+      if (!App.hasUltra || state.running || state.saving) return;
+      const item = Array.from(event.dataTransfer.items || []).find((entry) => entry.kind === "file");
+      if (!item || typeof item.getAsFileSystemHandle !== "function") {
+        printLine(`⚠ ${t("code_fs_unsupported")}`, "c-yellow");
+        return;
+      }
+      // Hay que pedir el handle dentro del propio evento, antes de cualquier await
+      item.getAsFileSystemHandle().then((handle) => {
+        if (handle && handle.kind === "directory") {
+          printUser(`/carpeta ${handle.name}`);
+          useHandle(handle);
+        } else {
+          printLine(t("term_drop_folder_only"), "c-yellow");
+        }
+      }).catch(() => printError(t("code_folder_error")));
+    });
   }
 
   function init() {
     if (state.initialized) return;
     state.initialized = true;
+    const field = input();
+
     $("#peduscode-btn").addEventListener("click", open);
     $("#code-menu-btn").addEventListener("click", () => Sidebar.openMobile());
     $("#code-sidebar-btn").addEventListener("click", () => Sidebar.toggle());
-    $("#code-locked-btn").addEventListener("click", () => Settings.openPlanModal());
-    $("#code-pick-btn").addEventListener("click", pickFolder);
-    $("#code-nofolder-btn").addEventListener("click", useZipMode);
-    $("#code-rescan-btn").addEventListener("click", async () => {
-      if (await rescan()) toast(t("code_rescanned"), "success");
+
+    field.addEventListener("keydown", onInputKeydown);
+    field.addEventListener("input", () => {
+      autoResize();
+      state.suggestIndex = 0;
+      updateSuggest();
     });
-    $("#code-clear-folder-btn").addEventListener("click", clearFolder);
-    $("#code-run-btn").addEventListener("click", run);
-    $("#code-cancel-btn").addEventListener("click", cancel);
-    $("#code-save-btn").addEventListener("click", save);
-    $("#code-zip-btn").addEventListener("click", downloadZip);
-    $("#code-undo-btn").addEventListener("click", undo);
-    $("#code-new-btn").addEventListener("click", newTask);
-    $("#code-select-all").addEventListener("change", (event) => {
-      state.results.forEach((result) => { result.selected = event.target.checked; });
-      renderResults();
+    field.addEventListener("blur", () => setTimeout(hideSuggest, 120));
+
+    const body = $("#term-body");
+    // Teclas de los menús de opciones y cancelación con Esc
+    body.addEventListener("keydown", (event) => {
+      if (handleChoiceKey(event)) return;
+      if (event.key === "Escape" && (state.running || !$("#term-suggest").hidden)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!$("#term-suggest").hidden) hideSuggest();
+        else requestCancel();
+      }
     });
-    const input = $("#code-task");
-    input.addEventListener("input", updateCounter);
-    input.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); run(); }
+    // Clic en una zona vacía: volver al cuadro de texto (sin romper la selección de texto)
+    body.addEventListener("click", (event) => {
+      if (event.target.closest("button, a, textarea, input, .term-choice, .term-diff")) return;
+      const selection = window.getSelection();
+      if (selection && String(selection).length) return;
+      if (state.choice) state.choice.box.focus({ preventScroll: true });
+      else focusInput();
     });
-    // Sombra de la cabecera al hacer scroll
-    $("#code-scroll").addEventListener("scroll", () => {
-      $("#code-area .chat-header").classList.toggle("scrolled", $("#code-scroll").scrollTop > 4);
+    body.addEventListener("scroll", () => {
+      state.stick = body.scrollHeight - body.scrollTop - body.clientHeight < 80;
     }, { passive: true });
+
+    // Escribir en cualquier parte de PedusCode lleva el texto a la terminal
+    document.addEventListener("keydown", (event) => {
+      if ($("#code-area").hidden || Modal.stack.length || state.choice) return;
+      if (event.ctrlKey || event.metaKey || event.altKey || event.key.length !== 1) return;
+      const active = document.activeElement;
+      if (active && (active.matches("input, textarea, select") || active.isContentEditable)) return;
+      focusInput();
+    });
+
+    setupDragAndDrop();
+
     // Avisar antes de cerrar la pestaña con trabajo sin guardar
     window.addEventListener("beforeunload", (event) => {
-      const unsaved = Array.from(state.results.values()).some((result) => result.selected && !result.saved);
-      if (state.running || (state.dirHandle && unsaved)) { event.preventDefault(); event.returnValue = ""; }
+      const unsaved = state.dirHandle && selectedResults().length > 0;
+      if (state.running || unsaved) { event.preventDefault(); event.returnValue = ""; }
     });
     document.addEventListener("languagechange", () => {
-      renderExamples();
-      renderFolder();
-      renderUsage();
-      if (state.results.size) renderResults();
+      if (state.pristine && App.profile) {
+        output().innerHTML = "";
+        printWelcome();
+      }
+      updateChrome();
+      if (state.review) renderReviewRows();
     });
-    $("#code-cancel-btn").hidden = true;
-    renderExamples();
-    renderFolder();
-    updateCounter();
-    updateSaveButtons();
+    updateChrome();
+    renderAccess();
   }
 
-  /** Al cerrar sesión: limpiar todo */
+  /** Al cerrar sesión: dejar la terminal como nueva */
   function reset() {
     if (state.controller) state.controller.abort();
+    stopStatus();
+    dismissChoice();
     clearFolder();
-    newTask();
+    state.results.clear();
+    state.agents.clear();
+    state.review = null;
+    state.history = [];
+    state.historyIndex = -1;
+    state.lockedShown = null;
+    state.pristine = true;
+    if (state.initialized) output().innerHTML = "";
   }
 
-  return { init, open, reset, renderAccess, safePath, diffLines, isSecretFile, get running() { return state.running; } };
+  return {
+    init, open, reset, renderAccess, handleEscape,
+    safePath, diffLines, isSecretFile,
+    get running() { return state.running; },
+  };
 })();
+
+/* Arranque de respaldo: PedusCode funciona aunque otro módulo falle al iniciar */
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(() => {
+    try { PedusCode.init(); } catch (_) { /* ya iniciado o la página no tiene PedusCode */ }
+  }, 0);
+});

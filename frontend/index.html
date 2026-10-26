@@ -279,12 +279,26 @@
         <div id="attachment-preview" class="attachment-preview" hidden></div>
 
         <div id="composer" class="composer">
+          <!-- Sugerencias de skills al escribir "/" -->
+          <div id="skill-suggest" class="skill-suggest" role="listbox" hidden></div>
+          <!-- Skills elegidas para esta conversación -->
+          <div id="skill-chips" class="skill-chips" hidden></div>
           <textarea id="message-input" rows="1" data-i18n-placeholder="input_placeholder" placeholder="Escribe un mensaje a PedusGPT..." aria-label="Mensaje"></textarea>
           <div class="composer-toolbar">
             <div class="composer-tools">
               <button type="button" id="attach-btn" class="icon-btn" data-icon="paperclip" data-i18n-title="attach"></button>
               <input type="file" id="file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/markdown,text/csv,.txt,.md,.csv" hidden />
               <button type="button" id="mic-btn" class="icon-btn" data-icon="mic" data-i18n-title="mic"></button>
+              <!-- Modo pensar: clic = activar/desactivar · flecha = nivel de esfuerzo -->
+              <div id="think-group" class="think-group">
+                <button type="button" id="think-btn" class="think-btn" aria-pressed="true">
+                  <span data-icon="brain"></span><span class="think-label-text" data-i18n="think_toggle">Pensar</span>
+                </button>
+                <button type="button" id="effort-btn" class="effort-btn" aria-haspopup="menu" aria-expanded="false" data-icon="chevronDown" data-i18n-title="effort_title"></button>
+              </div>
+              <button type="button" id="skills-btn" class="icon-btn skills-btn" aria-haspopup="menu" aria-expanded="false" data-i18n-title="skills">
+                <span data-icon="puzzle"></span><span class="skills-badge" hidden>0</span>
+              </button>
               <div id="model-selector-inline" class="model-selector model-selector-inline"></div>
             </div>
             <button type="button" id="send-btn" class="send-btn" data-icon="send" data-i18n-title="send" disabled></button>
@@ -298,104 +312,32 @@
       </div>
     </main>
 
-    <!-- PedusCode: agente de código con 10 IAs (solo Plan MAX) -->
+    <!-- PedusCode: agente de código con 10 IAs en una terminal (solo Plan MAX) -->
     <main class="chat-area code-area" id="code-area" hidden>
-      <header class="chat-header">
-        <button type="button" id="code-menu-btn" class="icon-btn mobile-only" data-icon="menu" data-i18n-title="menu"></button>
-        <button type="button" id="code-sidebar-btn" class="icon-btn desktop-collapsed-only" data-icon="sidebar" data-i18n-title="toggle_sidebar"></button>
-        <h2 class="chat-title">PedusCode</h2>
-        <span class="badge badge-gold">MAX</span>
-        <div class="chat-header-actions">
-          <span id="code-usage" class="model-badge" hidden></span>
+      <div class="term-window">
+        <div class="term-titlebar">
+          <button type="button" id="code-menu-btn" class="icon-btn mobile-only" data-icon="menu" data-i18n-title="menu"></button>
+          <button type="button" id="code-sidebar-btn" class="icon-btn desktop-collapsed-only" data-icon="sidebar" data-i18n-title="toggle_sidebar"></button>
+          <span class="term-lights" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span id="term-title" class="term-title">pedus@code: ~</span>
+          <span id="code-usage" class="term-usage" hidden></span>
         </div>
-      </header>
 
-      <div class="code-scroll" id="code-scroll">
-        <div class="code-inner">
-          <!-- Bloqueo para quien no tiene el Plan MAX -->
-          <section id="code-locked" class="plan-card plan-card-premium code-locked" hidden>
-            <div class="plan-crown" data-icon="lock"></div>
-            <h2 class="plan-title">PedusCode <span class="badge badge-gold">MAX</span></h2>
-            <p class="plan-subtitle" data-i18n="code_locked_text">PedusCode es exclusivo del Plan MAX.</p>
-            <button type="button" id="code-locked-btn" class="btn btn-gold"><span data-icon="crown"></span><span data-i18n="code_see_plan">Ver el Plan MAX</span></button>
-          </section>
-
-          <!-- Presentación -->
-          <div class="code-hero">
-            <img src="/assets/logo.png" alt="" width="64" height="64" class="code-hero-logo logo-breathe" />
-            <h1 class="code-hero-title">PedusCode</h1>
-            <p class="code-hero-sub" data-i18n="code_subtitle">Un equipo de 10 IAs que programa por ti, directamente en tu carpeta.</p>
-            <div class="code-pills">
-              <span class="code-pill">🧠 <span data-i18n="code_pill_planner">1 organizador</span></span>
-              <span class="code-pill">🤖 <span data-i18n="code_pill_agents">hasta 9 agentes</span></span>
-              <span class="code-pill">📁 <span data-i18n="code_pill_folder">sin descargas</span></span>
+        <div id="term-body" class="term-body">
+          <div id="term-output" class="term-output" role="log" aria-live="polite"></div>
+          <div id="term-status" class="term-status" hidden></div>
+          <div id="term-prompt" class="term-prompt">
+            <div class="term-prompt-box">
+              <span class="term-caret" aria-hidden="true">&gt;</span>
+              <textarea id="term-input" class="term-input" rows="1" spellcheck="false" autocomplete="off" maxlength="4000" aria-label="PedusCode" data-i18n-placeholder="term_placeholder"></textarea>
+            </div>
+            <div id="term-suggest" class="term-suggest" role="listbox" hidden></div>
+            <div class="term-hints">
+              <span id="term-hint-left" data-i18n="term_hint">/ comandos · ↑ historial · Shift+Enter nueva línea</span>
+              <span id="term-hint-right" class="term-cwd"></span>
             </div>
           </div>
-
-          <section id="code-setup">
-            <!-- Paso 1: carpeta -->
-            <div class="code-card">
-              <div class="code-card-head"><span class="code-step">1</span><h3 data-i18n="code_step_folder">Elige la carpeta del proyecto</h3></div>
-              <div id="code-folder-empty">
-                <p class="muted small" data-i18n="code_folder_desc">PedusCode leerá el código de esa carpeta y guardará ahí los cambios cuando tú los apruebes.</p>
-                <div class="code-folder-actions">
-                  <button type="button" id="code-pick-btn" class="btn btn-primary"><span data-icon="folder"></span><span data-i18n="code_pick_folder">Elegir carpeta</span></button>
-                  <button type="button" id="code-nofolder-btn" class="btn btn-secondary"><span data-icon="sparkles"></span><span data-i18n="code_new_project">Proyecto nuevo (ZIP)</span></button>
-                </div>
-                <p id="code-fs-unsupported" class="code-note code-note-warn small" data-i18n="code_fs_unsupported" hidden>Tu navegador no permite abrir carpetas. Usa Chrome o Edge en un ordenador; mientras tanto, recibirás los archivos en un ZIP.</p>
-                <p class="code-note small"><span data-icon="shield"></span><span data-i18n="code_safety_note">Solo se leen archivos de código. Las carpetas del sistema, los secretos (.env, claves) y node_modules nunca se envían.</span></p>
-              </div>
-              <div id="code-folder-info" class="code-folder-info" hidden>
-                <span class="code-folder-icon" data-icon="folder"></span>
-                <div class="code-folder-text">
-                  <strong id="code-folder-name"></strong>
-                  <span id="code-folder-stats" class="muted small"></span>
-                </div>
-                <button type="button" id="code-rescan-btn" class="icon-btn" data-icon="refresh" data-i18n-title="code_rescan"></button>
-                <button type="button" id="code-clear-folder-btn" class="icon-btn" data-icon="x" data-i18n-title="code_close_folder"></button>
-              </div>
-            </div>
-
-            <!-- Paso 2: tarea -->
-            <div class="code-card">
-              <div class="code-card-head"><span class="code-step">2</span><h3 data-i18n="code_step_task">¿Qué quieres que haga?</h3></div>
-              <textarea id="code-task" class="input code-task" rows="4" maxlength="4000" data-i18n-placeholder="code_task_placeholder" placeholder="Ejemplo: crea un juego de la serpiente con puntuación y récord guardado"></textarea>
-              <div id="code-examples" class="code-examples"></div>
-              <div class="code-run-row">
-                <span id="code-task-counter" class="muted small">0/4000</span>
-                <button type="button" id="code-run-btn" class="btn btn-gold btn-lg"><span data-icon="rocket"></span><span data-i18n="code_run">Lanzar PedusCode</span></button>
-              </div>
-            </div>
-          </section>
-
-          <!-- Paso 3: progreso del equipo -->
-          <section id="code-progress" class="code-card" hidden>
-            <div class="code-card-head">
-              <span class="code-step">3</span><h3 data-i18n="code_step_progress">El equipo está trabajando</h3>
-              <span id="code-timer" class="muted small code-timer"></span>
-              <button type="button" id="code-cancel-btn" class="btn btn-ghost code-small-btn"><span data-icon="stop"></span><span data-i18n="cancel">Cancelar</span></button>
-            </div>
-            <div id="code-planner" class="code-planner"></div>
-            <p id="code-summary" class="code-summary" hidden></p>
-            <div id="code-agents" class="code-agents"></div>
-          </section>
-
-          <!-- Paso 4: revisar y guardar -->
-          <section id="code-results" class="code-card" hidden>
-            <div class="code-card-head">
-              <span class="code-step">4</span><h3 data-i18n="code_step_review">Revisa los cambios</h3>
-              <span id="code-results-count" class="muted small code-timer"></span>
-            </div>
-            <p class="muted small" data-i18n="code_review_desc">Marca los archivos que quieres guardar. Pulsa en uno para ver los cambios.</p>
-            <label class="code-select-all"><input type="checkbox" id="code-select-all" /> <span data-i18n="code_select_all">Seleccionar todo</span></label>
-            <div id="code-file-list" class="code-file-list"></div>
-            <div class="code-results-actions">
-              <button type="button" id="code-save-btn" class="btn btn-primary"><span data-icon="save"></span><span data-i18n="code_save">Guardar en mi carpeta</span></button>
-              <button type="button" id="code-zip-btn" class="btn btn-secondary"><span data-icon="download"></span><span data-i18n="code_download_zip">Descargar ZIP</span></button>
-              <button type="button" id="code-undo-btn" class="btn btn-secondary" hidden><span data-icon="undo"></span><span data-i18n="code_undo">Deshacer</span></button>
-              <button type="button" id="code-new-btn" class="btn btn-ghost"><span data-icon="plus"></span><span data-i18n="code_new_task">Nueva tarea</span></button>
-            </div>
-          </section>
+          <div id="term-drop" class="term-drop" hidden><span data-i18n="term_drop">Suelta la carpeta aquí</span></div>
         </div>
       </div>
     </main>
@@ -568,6 +510,17 @@
     </div>
   </div>
 
+  <!-- MODAL: skills (lista, editor e importación desde GitHub) -->
+  <div id="skills-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="skills-title" hidden>
+    <div class="modal modal-lg skills-modal">
+      <header class="modal-header">
+        <h2 id="skills-title"><span data-icon="puzzle"></span> <span data-i18n="skills">Skills</span> <span id="skills-count" class="skills-count"></span></h2>
+        <button type="button" class="icon-btn" data-close data-icon="x" data-i18n-title="close"></button>
+      </header>
+      <div class="modal-body" id="skills-modal-body"></div>
+    </div>
+  </div>
+
   <!-- MODAL: diálogo genérico (confirmar / pedir texto / aviso) -->
   <div id="dialog-modal" class="modal-overlay" role="alertdialog" aria-modal="true" aria-labelledby="dialog-title" hidden>
     <div class="modal modal-sm">
@@ -603,6 +556,9 @@
   <script defer src="/js/app.js"></script>
   <script defer src="/js/auth.js"></script>
   <script defer src="/js/sidebar.js"></script>
+  <script defer src="/js/reasoning.js"></script>
+  <script defer src="/js/skills.js"></script>
+  <script defer src="/js/websearch.js"></script>
   <script defer src="/js/chat.js"></script>
   <script defer src="/js/files.js"></script>
   <script defer src="/js/voice.js"></script>

@@ -124,6 +124,8 @@ const App = {
     ModelSelector.render();
     Chat.updateGreeting();
     PedusCode.renderAccess();
+    Reasoning.render();
+    Skills.renderAccess();
   },
 
   get hasUltra() {
@@ -583,6 +585,7 @@ function setupShortcuts() {
     if (event.key === "Escape") {
       if (Popover.close()) return;
       if (Modal.closeTop()) return;
+      if (App.section === "code" && PedusCode.handleEscape()) return;
       if (Chat.editing) { Chat.cancelEdit(); return; }
       if (Sidebar.isMobileOpen()) { Sidebar.closeMobile(); return; }
       Voice.stopSpeaking();
@@ -598,7 +601,7 @@ function setupShortcuts() {
       Sidebar.toggle();
     } else if (mod && (key === "/" || event.code === "Slash")) {
       event.preventDefault();
-      $(App.section === "code" ? "#code-task" : "#message-input").focus();
+      $(App.section === "code" ? "#term-input" : "#message-input").focus();
     }
   });
 }
@@ -614,6 +617,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   Sidebar.init();
   Chat.init();
+  Reasoning.init();
+  Skills.init();
   Files.init();
   Voice.init();
   Exporter.init();

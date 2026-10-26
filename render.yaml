@@ -35,19 +35,21 @@ services:
         sync: false
       - key: ULTRA_DAILY_LIMIT
         value: "30"
-      - key: GROQ_MODEL_BASIC
-        value: llama-3.1-8b-instant,openai/gpt-oss-20b
-      - key: GROQ_MODEL_PRO
-        value: llama-3.3-70b-versatile,openai/gpt-oss-120b
-      - key: GROQ_MODEL_ULTRA
-        value: llama-3.1-405b-reasoning,openai/gpt-oss-120b
-      - key: GROQ_MODEL_TITLE
-        value: llama-3.1-8b-instant,openai/gpt-oss-20b
       - key: GROQ_VISION_MODEL
         value: qwen/qwen3.8-27b
       - key: GROQ_STT_MODEL
         value: whisper-large-v3-turbo
       - key: GROQ_MAX_TOKENS
         value: "4096"
+      # Opcionales: Mistral (respaldo y PRO ULTRA) y búsqueda web (Tavily / Exa).
+      # Si las dejas vacías, PedusGPT funciona solo con Groq y sin búsqueda web.
+      - key: MISTRAL_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: EXA_API_KEY
+        sync: false
+      - key: WEB_SEARCH_DAILY_LIMIT
+        value: "30"
       - key: ENABLE_CSP
         value: "true"

@@ -183,7 +183,7 @@ async def _run_agent(agent: AgentPlan, task: str, plan: Plan, files: dict[str, s
         await emit({"type": "agent", "id": agent.id, "status": "waiting", "seconds": round(seconds)})
 
     async def on_model(model: str):
-        await emit({"type": "agent", "id": agent.id, "status": "working", "chars": 0, "model": model.split("/")[-1]})
+        await emit({"type": "agent", "id": agent.id, "status": "working", "chars": 0, "model": model.split(":")[-1].split("/")[-1]})
 
     allowed = {f["path"]: f for f in agent.files}
     try:

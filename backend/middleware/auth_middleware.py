@@ -212,3 +212,37 @@ def code_usage(profile: dict) -> dict:
         "limit": limit,
         "remaining": None if unlimited else max(0, limit - used),
     }
+
+
+def ultramax_usage(profile: dict) -> dict:
+    """Uso diario del esfuerzo UltraMAX a partir del perfil."""
+    role = profile.get("role", "user")
+    used = profile.get("daily_ultramax_runs") or 0
+    if str(profile.get("last_ultramax_reset") or "") < today_utc():
+        used = 0
+    limit = settings.ULTRAMAX_DAILY_LIMIT
+    unlimited = role == "owner"
+    return {
+        "has_access": role in ULTRA_ROLES,
+        "unlimited": unlimited,
+        "used": used,
+        "limit": limit,
+        "remaining": None if unlimited else max(0, limit - used),
+    }
+
+
+def search_usage(profile: dict) -> dict:
+    """Uso diario de la búsqueda web automática (todos los roles; el owner sin límite)."""
+    role = profile.get("role", "user")
+    used = profile.get("daily_search_requests") or 0
+    if str(profile.get("last_search_reset") or "") < today_utc():
+        used = 0
+    limit = settings.WEB_SEARCH_DAILY_LIMIT
+    unlimited = role == "owner"
+    return {
+        "has_access": True,
+        "unlimited": unlimited,
+        "used": used,
+        "limit": limit,
+        "remaining": None if unlimited else max(0, limit - used),
+    }

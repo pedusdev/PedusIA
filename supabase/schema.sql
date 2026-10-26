@@ -44,6 +44,12 @@ alter table public.profiles add column if not exists last_seen_at timestamptz de
 -- Contador diario de PedusCode (agente de código, Plan MAX)
 alter table public.profiles add column if not exists daily_code_runs integer default 0;
 alter table public.profiles add column if not exists last_code_reset date default ((now() at time zone 'utc')::date);
+-- Contador diario del esfuerzo UltraMAX (borrador + revisión + respuesta final)
+alter table public.profiles add column if not exists daily_ultramax_runs integer default 0;
+alter table public.profiles add column if not exists last_ultramax_reset date default ((now() at time zone 'utc')::date);
+-- Contador diario de la búsqueda web automática
+alter table public.profiles add column if not exists daily_search_requests integer default 0;
+alter table public.profiles add column if not exists last_search_reset date default ((now() at time zone 'utc')::date);
 
 create table if not exists public.conversations (
     id uuid default gen_random_uuid() primary key,
@@ -67,6 +73,13 @@ create table if not exists public.messages (
     created_at timestamptz default now()
 );
 alter table public.messages add column if not exists file_text text default null;
+-- Modo pensar: razonamiento visible, tiempo pensando y nivel de esfuerzo; skills usadas
+alter table public.messages add column if not exists reasoning text default null;
+alter table public.messages add column if not exists thinking_ms integer default null;
+alter table public.messages add column if not exists effort text default null;
+alter table public.messages add column if not exists skills jsonb default null;
+-- Fuentes de la búsqueda web usadas en la respuesta
+alter table public.messages add column if not exists sources jsonb default null;
 
 create table if not exists public.uploaded_files (
     id uuid default gen_random_uuid() primary key,
@@ -81,12 +94,32 @@ create table if not exists public.uploaded_files (
 );
 alter table public.uploaded_files add column if not exists extracted_text text default null;
 
+-- Skills: instrucciones especializadas creadas por el usuario o importadas de GitHub (Plan MAX)
+create table if not exists public.skills (
+    id uuid default gen_random_uuid() primary key,
+    user_id uuid not null references public.profiles(id) on delete cascade,
+    name text not null check (name ~ '^[a-z0-9][a-z0-9-]{0,39}$'),   -- identificador: profe-mates
+    title text not null check (char_length(title) between 1 and 60),
+    emoji text not null default '🧩',
+    description text not null default '' check (char_length(description) <= 500),
+    instructions text not null check (char_length(instructions) <= 30000),
+    resources jsonb not null default '[]'::jsonb,                      -- [{path, content}] de referencia
+    source_url text default null,                                      -- origen en GitHub (si se importó)
+    enabled boolean not null default true,                             -- activa en el chat
+    auto boolean not null default true,                                -- la IA la elige sola si encaja
+    uses integer not null default 0,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    unique (user_id, name)
+);
+
 -- Índices
 create index if not exists idx_conversations_user_updated on public.conversations (user_id, updated_at desc);
 create index if not exists idx_messages_conversation_created on public.messages (conversation_id, created_at);
 create index if not exists idx_uploaded_files_user on public.uploaded_files (user_id);
 create index if not exists idx_profiles_role on public.profiles (role);
 create index if not exists idx_profiles_last_seen on public.profiles (last_seen_at);
+create index if not exists idx_skills_user on public.skills (user_id, enabled);
 
 -- ---------------------------------------------------------------------
 -- FUNCIONES AUXILIARES
@@ -132,6 +165,10 @@ begin
         new.last_405b_reset := old.last_405b_reset;
         new.daily_code_runs := old.daily_code_runs;
         new.last_code_reset := old.last_code_reset;
+        new.daily_ultramax_runs := old.daily_ultramax_runs;
+        new.last_ultramax_reset := old.last_ultramax_reset;
+        new.daily_search_requests := old.daily_search_requests;
+        new.last_search_reset := old.last_search_reset;
         new.email := old.email;
         new.id := old.id;
     end if;
@@ -144,6 +181,11 @@ drop trigger if exists protect_profile_columns on public.profiles;
 create trigger protect_profile_columns
     before update on public.profiles
     for each row execute function public.protect_profile_columns();
+
+drop trigger if exists skills_updated_at on public.skills;
+create trigger skills_updated_at
+    before update on public.skills
+    for each row execute function public.set_updated_at();
 
 drop trigger if exists conversations_updated_at on public.conversations;
 create trigger conversations_updated_at
@@ -163,12 +205,12 @@ create trigger conversations_updated_at
 -- ---------------------------------------------------------------------
 grant usage on schema public to service_role;
 grant select, insert, update, delete on table
-    public.profiles, public.conversations, public.messages, public.uploaded_files
+    public.profiles, public.conversations, public.messages, public.uploaded_files, public.skills
     to service_role;
 grant usage, select on all sequences in schema public to service_role;
 
 revoke all on table
-    public.profiles, public.conversations, public.messages, public.uploaded_files
+    public.profiles, public.conversations, public.messages, public.uploaded_files, public.skills
     from anon, authenticated;
 
 -- ---------------------------------------------------------------------
@@ -178,6 +220,7 @@ alter table public.profiles enable row level security;
 alter table public.conversations enable row level security;
 alter table public.messages enable row level security;
 alter table public.uploaded_files enable row level security;
+alter table public.skills enable row level security;
 
 -- Perfiles
 drop policy if exists "Users can view own profile" on public.profiles;
@@ -250,6 +293,11 @@ create policy "Users can create own files" on public.uploaded_files
 drop policy if exists "Users can delete own files" on public.uploaded_files;
 create policy "Users can delete own files" on public.uploaded_files
     for delete using (auth.uid() = user_id);
+
+-- Skills (el backend usa la service key; estas políticas solo protegen el acceso directo)
+drop policy if exists "Users can view own skills" on public.skills;
+create policy "Users can view own skills" on public.skills
+    for select using (auth.uid() = user_id);
 
 -- ---------------------------------------------------------------------
 -- PERFIL AUTOMÁTICO AL REGISTRARSE (email o Google)
@@ -405,6 +453,106 @@ revoke execute on function public.consume_code_run(uuid, integer) from public, a
 revoke execute on function public.refund_code_run(uuid) from public, anon, authenticated;
 grant execute on function public.consume_code_run(uuid, integer) to service_role;
 grant execute on function public.refund_code_run(uuid) to service_role;
+
+-- ---------------------------------------------------------------------
+-- LÍMITE DIARIO DE ULTRAMAX (incremento atómico, reinicio a las 00:00 UTC)
+-- ---------------------------------------------------------------------
+create or replace function public.consume_ultramax_run(p_user_id uuid, p_limit integer)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_today date := (now() at time zone 'utc')::date;
+    v_count integer;
+begin
+    update public.profiles
+    set daily_ultramax_runs = case
+            when last_ultramax_reset is null or last_ultramax_reset < v_today then 1
+            else coalesce(daily_ultramax_runs, 0) + 1
+        end,
+        last_ultramax_reset = v_today
+    where id = p_user_id
+      and (last_ultramax_reset is null or last_ultramax_reset < v_today or coalesce(daily_ultramax_runs, 0) < p_limit)
+    returning daily_ultramax_runs into v_count;
+
+    if not found then
+        return -1;
+    end if;
+    return v_count;
+end;
+$$;
+
+-- Devuelve un uso (si Groq falló antes de escribir la respuesta)
+create or replace function public.refund_ultramax_run(p_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    update public.profiles
+    set daily_ultramax_runs = greatest(0, coalesce(daily_ultramax_runs, 0) - 1)
+    where id = p_user_id
+      and last_ultramax_reset = (now() at time zone 'utc')::date;
+end;
+$$;
+
+revoke execute on function public.consume_ultramax_run(uuid, integer) from public, anon, authenticated;
+revoke execute on function public.refund_ultramax_run(uuid) from public, anon, authenticated;
+grant execute on function public.consume_ultramax_run(uuid, integer) to service_role;
+grant execute on function public.refund_ultramax_run(uuid) to service_role;
+
+-- ---------------------------------------------------------------------
+-- LÍMITE DIARIO DE BÚSQUEDA WEB (incremento atómico, reinicio a las 00:00 UTC)
+-- ---------------------------------------------------------------------
+create or replace function public.consume_search_request(p_user_id uuid, p_limit integer)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_today date := (now() at time zone 'utc')::date;
+    v_count integer;
+begin
+    update public.profiles
+    set daily_search_requests = case
+            when last_search_reset is null or last_search_reset < v_today then 1
+            else coalesce(daily_search_requests, 0) + 1
+        end,
+        last_search_reset = v_today
+    where id = p_user_id
+      and (last_search_reset is null or last_search_reset < v_today or coalesce(daily_search_requests, 0) < p_limit)
+    returning daily_search_requests into v_count;
+
+    if not found then
+        return -1;
+    end if;
+    return v_count;
+end;
+$$;
+
+-- Devuelve una búsqueda (si los buscadores no dieron resultados)
+create or replace function public.refund_search_request(p_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    update public.profiles
+    set daily_search_requests = greatest(0, coalesce(daily_search_requests, 0) - 1)
+    where id = p_user_id
+      and last_search_reset = (now() at time zone 'utc')::date;
+end;
+$$;
+
+revoke execute on function public.consume_search_request(uuid, integer) from public, anon, authenticated;
+revoke execute on function public.refund_search_request(uuid) from public, anon, authenticated;
+grant execute on function public.consume_search_request(uuid, integer) to service_role;
+grant execute on function public.refund_search_request(uuid) to service_role;
 
 -- (Opcional) Reset programado a las 00:00 UTC con pg_cron.
 -- No es imprescindible: el backend ya reinicia el contador al detectar un día nuevo.

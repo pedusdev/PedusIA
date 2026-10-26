@@ -16,6 +16,7 @@
 2. [Descargar el proyecto](#2-descargar-el-proyecto)
 3. [Instalar las herramientas en tu ordenador](#3-instalar-las-herramientas-en-tu-ordenador)
 4. [Groq: la clave de la IA](#4-groq-la-clave-de-la-ia)
+    - [4 bis. Mistral y búsqueda web (opcional)](#4-bis-mistral-y-búsqueda-web-opcional)
 5. [Supabase: usuarios, base de datos y archivos](#5-supabase-usuarios-base-de-datos-y-archivos)
 6. [Login con Google (opcional)](#6-login-con-google-opcional)
 7. [Probar PedusGPT en tu ordenador](#7-probar-pedusgpt-en-tu-ordenador)
@@ -25,6 +26,8 @@
 11. [UptimeRobot: que tu web no se duerma](#11-uptimerobot-que-tu-web-no-se-duerma)
 12. [Guía de uso para los usuarios](#12-guía-de-uso-para-los-usuarios)
     - [12 bis. PedusCode: el agente de programación](#12-bis-peduscode-el-agente-de-programación)
+    - [12 ter. Modo pensar, esfuerzo y skills](#12-ter-modo-pensar-esfuerzo-y-skills)
+    - [12 quater. Búsqueda web](#12-quater-búsqueda-web)
 13. [Guía del administrador (roles, Plan MAX, baneos)](#13-guía-del-administrador)
 14. [Personalizar PedusGPT](#14-personalizar-pedusgpt)
 15. [Actualizar la web después de hacer cambios](#15-actualizar-la-web-después-de-hacer-cambios)
@@ -181,16 +184,49 @@ Groq es quien ejecuta los modelos de IA. Su nivel gratuito es muy generoso.
 
 ### ¿Qué modelos usa PedusGPT?
 
-| En la app | Primero intenta… | Si no está disponible, usa… |
+| En la app | Primero intenta… | Si falla, usa… |
 |---|---|---|
-| ⚡ PedusGPT 2 | `llama-3.1-8b-instant` | `openai/gpt-oss-20b` |
-| 🚀 PedusGPT 2 PRO | `llama-3.3-70b-versatile` | `openai/gpt-oss-120b` |
-| 👑 PedusGPT 2 PRO ULTRA | `llama-3.1-405b-reasoning` | `openai/gpt-oss-120b` |
+| ⚡ PedusGPT 2 | `openai/gpt-oss-20b` (Groq) | `qwen/qwen3.8-27b` → `mistral-small-latest` |
+| 🚀 PedusGPT 2 PRO | `openai/gpt-oss-120b` (Groq) | `mistral-medium-latest` → `qwen/qwen3.8-27b` |
+| 👑 PedusGPT 2 PRO ULTRA | `mistral-large-4` (Mistral) | `mistral-medium-latest` → `openai/gpt-oss-120b` → `qwen/qwen3.8-27b` |
 | 🖼️ Imágenes adjuntas | `qwen/qwen3.8-27b` (con visión) | Responde solo con el texto |
 
-**Por qué hay "plan B":** Groq ya no ofrece el modelo de 405B, y en algunas cuentas gratuitas marca los modelos Llama como *Enterprise*. PedusGPT lo detecta solo y pasa al siguiente modelo de la lista sin que el usuario note nada. En la práctica, PRO ULTRA funcionará con `gpt-oss-120b`, que es el modelo más potente del nivel gratuito.
+**Por qué hay "plan B":** si un modelo no existe, está saturado o su proveedor no responde, PedusGPT pasa al siguiente de la lista sin que el usuario note nada. Los modelos de Mistral solo se usan si añades la clave de Mistral (apartado 4 bis); si no, todo funciona solo con Groq.
+
+> ℹ️ Groq apagó los modelos `llama-3.1-8b-instant` y `llama-3.3-70b-versatile` en agosto de 2026. Si los tenías en alguna variable de Render, PedusGPT los cambia solo por los nuevos.
 
 Puedes ver los modelos disponibles para tu cuenta en <https://console.groq.com/docs/models> y tus límites en **Settings → Limits** dentro de la consola.
+
+---
+
+## 4 bis. Mistral y búsqueda web (opcional)
+
+Las tres claves de este apartado son **opcionales y gratuitas**. Puedes hacerlo ahora o más tarde (solo hay que añadir la variable en Render).
+
+### Mistral: segundo proveedor de IA
+
+Hace de **respaldo** cuando Groq está saturado y es el modelo principal de **PRO ULTRA**.
+
+1. Entra en <https://console.mistral.ai> y crea una cuenta.
+2. Te pedirá elegir plan: escoge el gratuito **Experiment** (no pide tarjeta, sí verificar un número de teléfono).
+3. Menú **API Keys** → **Create new key** → ponle un nombre (`pedusgpt`) → **Create**.
+4. Copia la clave y guárdala: será la variable `MISTRAL_API_KEY`.
+
+> ⚠️ En el plan gratuito Mistral puede usar las conversaciones para mejorar sus modelos y el límite es de ~1 petición por segundo. Como tus usuarios son menores, explícalo en tu política de privacidad.
+
+### Tavily: buscador principal
+
+1. Entra en <https://app.tavily.com> y regístrate (con Google o email).
+2. En el panel (*Overview*) verás tu **API Key**, que empieza por `tvly-`. Cópiala: será `TAVILY_API_KEY`.
+3. El plan gratuito incluye **1.000 búsquedas al mes** sin tarjeta.
+
+### Exa: buscador de respaldo
+
+1. Entra en <https://dashboard.exa.ai> y regístrate.
+2. Menú **API Keys** → copia la clave (o crea una nueva): será `EXA_API_KEY`.
+3. Exa regala crédito al registrarte y un pequeño crédito gratuito cada mes.
+
+Con **al menos una** de las dos (Tavily o Exa) se activa la búsqueda web. Lo ideal es poner las dos: si Tavily falla o se le acaba el cupo, se usa Exa.
 
 ---
 
@@ -669,21 +705,96 @@ Pulsa tu nombre (abajo a la izquierda):
 
 ### Cómo se usa
 
-1. En la barra lateral pulsa **💻 PedusCode**.
-2. **Paso 1 — Carpeta:** pulsa **Elegir carpeta** y selecciona la carpeta de tu proyecto (por ejemplo `Documentos/mi-juego`). El navegador te pedirá permiso para **ver y editar** esa carpeta: acéptalo. Si vas a empezar de cero, pulsa **Proyecto nuevo (ZIP)**.
+PedusCode es una **terminal**: una ventana oscura donde escribes al lado del símbolo `>` y pulsas `Enter`. Lo que empieza por `/` es un **comando**; cualquier otra cosa es una **tarea** para las IAs.
+
+1. En la barra lateral pulsa **💻 PedusCode**. Verás la bienvenida y tres botones rápidos: `/carpeta`, `/nuevo` y `/ayuda`.
+2. **Abre tu carpeta:** escribe `/carpeta` (o pulsa el botón, o **arrastra la carpeta** desde el explorador de archivos hasta la terminal) y elige la carpeta de tu proyecto, por ejemplo `Documentos/mi-juego`. El navegador te pedirá permiso para **ver y editar** esa carpeta: acéptalo. Abajo a la derecha verás `📁 mi-juego · N archivos`. Si vas a empezar de cero, escribe `/nuevo`.
    - Solo funciona con **Chrome o Edge en un ordenador**. En móvil, Safari o Firefox recibirás los archivos en un ZIP.
    - Por seguridad, no se aceptan carpetas del sistema (`C:\Windows`, `Program Files`…), discos enteros ni tu carpeta de usuario completa.
-   - Los archivos con contraseñas o claves (`.env`, `.pem`, `id_rsa`…) y carpetas como `node_modules` o `.git` **nunca** se envían a la IA.
-3. **Paso 2 — Tarea:** escribe lo que quieres (o pulsa un ejemplo) y pulsa **Lanzar PedusCode** (o `Ctrl + Enter`).
-4. **Paso 3 — El equipo trabaja:** verás al **organizador** repartiendo el trabajo y una tarjeta por cada agente (🎨 diseño, 🧠 lógica, 📝 documentación…) con su estado: *En cola*, *Esperando turno*, *Escribiendo… N caracteres* y *Listo*. Con el plan gratuito de Groq suele tardar **1–3 minutos**.
-5. **Paso 4 — Revisa y guarda:** aparece la lista de archivos con **Nuevo** o **Modificado** y las líneas añadidas/quitadas. Pulsa un archivo para ver los cambios en verde y rojo. Marca los que quieras y pulsa **Guardar en mi carpeta**: se escriben directamente, sin descargar nada.
+   - Los archivos con contraseñas o claves (`.env`, `.pem`, `id_rsa`…) y carpetas como `node_modules` o `.git` **nunca** se envían a la IA. Con `/archivos` ves exactamente qué se va a leer.
+3. **Escribe la tarea** (o pulsa el ejemplo de «Prueba:») y pulsa `Enter`. `Shift + Enter` hace un salto de línea. Si no habías abierto ninguna carpeta, PedusCode te preguntará dónde trabajar.
+4. **El equipo trabaja:** aparece el plan del **organizador** y una línea por agente (🎨 diseño, 🧠 lógica, 📝 documentación…) con su estado: `○` en cola, `●` parpadeando mientras escribe, *Esperando turno* y `✓` listo, más los archivos que va entregando. Abajo verás *«Escribiendo código · 2/5 archivos (48 s · Esc para cancelar)»*. Con el plan gratuito de Groq suele tardar **1–3 minutos**. Para cancelar, pulsa `Esc` dos veces (o `Ctrl + C` dos veces).
+5. **Revisa y guarda:** sale la lista de archivos con **Nuevo** o **Modificado** y las líneas `+`/`−`. Pulsa un archivo para ver los cambios en verde y rojo con números de línea, y `[x]` / `[ ]` para marcar o desmarcar. Después aparece la pregunta **«¿Guardar N archivo(s) en mi-juego?»**: muévete con `↑ ↓` (o pulsa `1`, `2`, `3`) y confirma con `Enter`.
+   - **Sí, guardar en la carpeta:** se escriben directamente, sin descargar nada.
+   - **Descargar ZIP:** te da los archivos marcados en un `.zip`.
+   - **Ahora no:** podrás hacerlo luego con `/guardar` o `/zip`.
    - ⚠️ *Incompleto* o *Mucho más corto que el original*: vienen **desmarcados**; revísalos antes de guardarlos.
    - ⚠️ *Script*: revisa los `.sh`, `.bat` o `.ps1` antes de ejecutarlos.
    - Si mientras tanto has cambiado algún archivo, PedusCode te avisará antes de sobrescribirlo.
-   - **Deshacer** devuelve los archivos a como estaban y borra los que creó PedusCode.
-   - **Descargar ZIP** te da los archivos marcados en un `.zip`.
+   - `/deshacer` devuelve los archivos a como estaban y borra los que creó PedusCode.
 
-> 💡 **Consejos:** describe la tarea con detalle («un juego de la serpiente con récord guardado y botón de pausa»), elige la carpeta concreta del proyecto (no `Documentos` entero) y, si el resultado no te convence, pulsa **Nueva tarea** y pide los ajustes.
+**Comandos y atajos:**
+
+| Comando | Qué hace |
+|---|---|
+| `/carpeta` | Abrir una carpeta (o arrástrala) |
+| `/nuevo` | Proyecto nuevo (ZIP) |
+| `/archivos` | Ver los archivos que leerá la IA |
+| `/releer` | Volver a leer la carpeta |
+| `/cerrar` | Cerrar la carpeta |
+| `/guardar` · `/zip` | Guardar en la carpeta · descargar ZIP |
+| `/deshacer` | Deshacer el último guardado |
+| `/uso` | Ver cuántas ejecuciones te quedan hoy |
+| `/limpiar` | Limpiar la pantalla (`Ctrl + L`) |
+| `/ayuda` | Ver todos los comandos |
+
+Al escribir `/` aparece una lista de comandos: `↑ ↓` para elegir y `Tab` para completar. Con `↑ ↓` en el cuadro vacío recuperas lo que escribiste antes. Los comandos también aceptan nombres en inglés (`/open`, `/save`, `/undo`, `/help`…).
+
+> 💡 **Consejos:** describe la tarea con detalle («un juego de la serpiente con récord guardado y botón de pausa»), elige la carpeta concreta del proyecto (no `Documentos` entero) y, si el resultado no te convence, escribe otra tarea pidiendo los ajustes: PedusCode vuelve a leer la carpeta antes de cada ejecución.
+
+---
+
+## 12 ter. Modo pensar, esfuerzo y skills
+
+### Antes de usarlo por primera vez (solo el dueño de la web)
+
+Vuelve a ejecutar **todo** `supabase/schema.sql` en Supabase → **SQL Editor** → *Run* (es seguro repetirlo, no borra nada). Añade la tabla `skills`, las columnas del razonamiento en `messages` y el contador diario de UltraMAX. Si no lo haces, el chat sigue funcionando pero las skills avisarán con *«Falta actualizar la base de datos»* y el razonamiento no se guardará.
+
+### Modo pensar
+
+Junto al micrófono verás el botón **🧠 Medio**:
+
+- **Clic en el botón:** activa o desactiva el modo pensar. Desactivado pone **Pensar** y la IA contesta directamente.
+- **Clic en la flecha ⌄:** abre el menú con el interruptor y los **5 niveles de esfuerzo**: **Bajo**, **Medio**, **Alto**, **Ultra** 👑 y **UltraMAX** 👑.
+
+Cuando envías un mensaje con el modo pensar activado aparece un recuadro **«Pensando… 5 s»** donde ves en directo cómo razona la IA. Cuando empieza a escribir la respuesta, el recuadro se pliega y pone **«Pensó durante 12 s»**: pulsa encima para volver a verlo.
+
+- **Ultra** usa el modelo más potente y le pide comprobar cada paso. Ideal para problemas de matemáticas, física o código.
+- **UltraMAX** trabaja en tres fases que ves dentro del recuadro: 📝 **Borrador**, 🔍 **Revisión crítica** (otro modelo busca errores) y ✨ **Respuesta final** (la versión corregida). Tarda más (30 s – 2 min) y hay **10 al día** por persona con Plan MAX.
+
+### Skills (Plan MAX)
+
+Una **skill** es como darle a PedusGPT un «manual» para un tipo de tarea: por ejemplo *Profe de mates* («explica cada paso y propón un ejercicio al final») o *Corrector de redacción*.
+
+1. Pulsa el botón **🧩** del cuadro de mensaje → **Gestionar skills** → **Nueva skill**.
+2. Rellena el **nombre**, un **emoji**, **cuándo usarla** (la IA lee esto para decidir si la usa sola) y las **instrucciones**. Puedes añadir hasta 10 **archivos de referencia** de texto (apuntes, ejemplos…) o cargar un `SKILL.md` que ya tengas.
+3. Guarda. A partir de ahí:
+   - Con **«Elegir automáticamente»** activado (punto verde en 🧩), la IA usa las skills que encajan con cada mensaje.
+   - También puedes elegirlas tú (hasta 3) en el menú 🧩 o escribiendo **`/`** y el nombre (por ejemplo `/profe-mates`) y pulsando `Enter`.
+   - En la respuesta verás qué skills se han usado (🧩 📐 Profe de mates).
+
+**Importar de GitHub:** en *Gestionar skills* → **Importar de GitHub**, pega `anthropics/skills` o el enlace de un repositorio o carpeta pública, pulsa **Buscar**, marca las que quieras e **Importar**. Si una ya existía, se actualiza. GitHub permite 60 búsquedas por hora sin token; si lo necesitas, crea un token sin permisos en GitHub → *Settings → Developer settings → Personal access tokens* y ponlo en la variable `GITHUB_TOKEN` de Render.
+
+---
+
+## 12 quater. Búsqueda web
+
+### Antes de usarla por primera vez (solo el dueño de la web)
+
+1. Vuelve a ejecutar **todo** `supabase/schema.sql` en Supabase → **SQL Editor** → *Run* (es seguro repetirlo). Añade el contador diario de búsquedas y la columna `sources` de los mensajes.
+2. En Render → tu servicio → **Environment**, añade `TAVILY_API_KEY` y/o `EXA_API_KEY` (y `MISTRAL_API_KEY` si la tienes). Guarda: Render se redesplegará solo.
+3. Si en **Environment** tienes variables `GROQ_MODEL_BASIC`, `GROQ_MODEL_PRO`, `GROQ_MODEL_ULTRA`, `GROQ_MODEL_TITLE` (o `GROQ_MODEL_DEEP` / `REVIEW` / `ROUTER`, `PEDUSCODE_*_MODELS`), **bórralas**: así se usan las nuevas cadenas con Mistral. (Si conservan el valor original del Blueprint, PedusGPT ya las ignora, pero es más limpio borrarlas.)
+4. Abre `https://TU-APP.onrender.com/diagnostico`: los apartados de Mistral y de búsqueda web deben salir en verde.
+
+### Cómo funciona para los usuarios
+
+No hay que pulsar nada: cuando preguntas algo que necesita información actual (*«¿Quién ganó ayer el partido?»*, *«¿Qué tiempo hará el sábado en Barcelona?»*, *«Últimas noticias sobre…»*), PedusGPT busca solo.
+
+- Verás **🌐 Buscando en la web…** con lo que está buscando.
+- La respuesta incluye números como **¹ ²**: pulsa uno para abrir la fuente.
+- Debajo aparecen las **Fuentes** (web y título). Se abren en una pestaña nueva.
+- Cada persona tiene **30 respuestas con búsqueda al día** (se reinician a las 02:00 en verano / 01:00 en invierno, hora de España). El owner no tiene límite. Puedes ver cuántas te quedan en **Ajustes → Plan**.
+- Si se acaban, PedusGPT responde igual con lo que sabe y te avisa de que la información puede no estar actualizada.
 
 ---
 
@@ -777,10 +888,14 @@ Está en `backend/utils/system_prompts.py`, en la función `build_system_prompt`
 Cambia la variable `ULTRA_DAILY_LIMIT` en Render (**Environment**) y guarda: el servicio se reinicia solo. No hace falta tocar código.
 
 ### 🤖 Cambiar los modelos
-Variables `GROQ_MODEL_BASIC`, `GROQ_MODEL_PRO`, `GROQ_MODEL_ULTRA` y `GROQ_MODEL_TITLE`: son listas separadas por comas, y se usa el primer modelo que funcione. Ejemplo:
+Variables `GROQ_MODEL_BASIC`, `GROQ_MODEL_PRO`, `GROQ_MODEL_ULTRA` y `GROQ_MODEL_TITLE`: son listas separadas por comas, y se usa el primer modelo que funcione. Un nombre sin prefijo es de Groq; con `mistral:` delante, de Mistral. Ejemplo (PRO ULTRA solo con Groq):
 ```
-GROQ_MODEL_ULTRA=openai/gpt-oss-120b
+GROQ_MODEL_ULTRA=openai/gpt-oss-120b,qwen/qwen3.8-27b
 ```
+Si no defines estas variables se usan las cadenas recomendadas (mixtas Groq + Mistral).
+
+### 🌐 Límite de búsquedas web
+Cambia `WEB_SEARCH_DAILY_LIMIT` (30 por defecto). Para apagar la búsqueda web sin borrar las claves, pon `WEB_SEARCH_ENABLED=false`.
 Para desactivar el análisis de imágenes, deja `GROQ_VISION_MODEL` vacío.
 
 ### 🌍 Textos e idiomas
@@ -821,6 +936,9 @@ Son aproximados y pueden cambiar; consulta la web de cada servicio.
 | **Supabase (email)** | Muy pocos emails por hora con el servidor de serie | Configura un SMTP gratuito (Brevo, Resend…) |
 | **Render** | 750 h/mes, 512 MB de RAM, se duerme a los 15 min | UptimeRobot lo mantiene despierto |
 | **UptimeRobot** | 50 monitores, intervalo mínimo de 5 min | Te sobra |
+| **Mistral (Experiment)** | ~1 petición/s y ~20.000 tokens/min por modelo | PedusGPT pasa al siguiente modelo de la cadena |
+| **Tavily** | 1.000 búsquedas al mes | Se usa Exa; si tampoco, la IA responde sin buscar |
+| **Exa** | Crédito gratuito al registrarte + crédito mensual | La IA responde sin buscar |
 | **Groq (PedusCode)** | ~8.000 tokens por minuto y 200.000 por día en cada modelo | PedusCode espera su turno automáticamente (por eso tarda 1–3 min); si se agota el cupo diario, muestra un error y no gasta la ejecución si el organizador no llegó a trabajar |
 
 **Para cuidar el espacio:** los archivos subidos ocupan Storage. Puedes revisarlos en Supabase → **Storage → uploads** y borrar los antiguos.
@@ -861,7 +979,8 @@ Son aproximados y pueden cambiar; consulta la web de cada servicio.
 | Problema | Solución |
 |---|---|
 | *«Falta actualizar la base de datos»* | Vuelve a ejecutar todo `supabase/schema.sql` en Supabase |
-| No aparece el botón **Elegir carpeta** o sale *«Tu navegador no permite abrir carpetas»* | Usa Chrome o Edge en un ordenador (y la web con `https://`). Mientras tanto, usa **Proyecto nuevo (ZIP)** |
+| `/carpeta` no hace nada o sale *«Tu navegador no permite abrir carpetas»* | Usa Chrome o Edge en un ordenador (y la web con `https://`). Mientras tanto, usa `/nuevo` (ZIP) |
+| Tras actualizar la web, PedusCode se ve como antes o algún botón no responde | Recarga una vez con `Ctrl + Shift + R` (en Mac `Cmd + Shift + R`). A partir de ahora cada versión nueva se descarga sola |
 | *«Carpeta no permitida»* | Has elegido una carpeta del sistema o tu carpeta de usuario entera. Elige la carpeta concreta del proyecto |
 | *«La carpeta tiene demasiados archivos»* | Elige una subcarpeta más concreta (las dependencias como `node_modules` ya se ignoran solas) |
 | Se queda mucho rato en *«Esperando turno»* | Es normal en el plan gratuito de Groq (8.000 tokens/min por modelo). Si pasas al plan Developer, sube `GROQ_TPM_LIMIT` en Render |
@@ -927,6 +1046,7 @@ Son aproximados y pueden cambiar; consulta la web de cada servicio.
 
 **Configuración**
 - [ ] Clave de Groq creada y guardada
+- [ ] (Opcional) Claves de Mistral, Tavily y Exa
 - [ ] Proyecto de Supabase creado
 - [ ] `schema.sql` ejecutado sin errores
 - [ ] Tablas y buckets visibles en Supabase
@@ -947,6 +1067,7 @@ Son aproximados y pueden cambiar; consulta la web de cada servicio.
 - [ ] *Site URL* y *Redirect URLs* de Supabase actualizadas
 - [ ] Origen de Render añadido en Google Cloud
 - [ ] Monitor de UptimeRobot cada 5 minutos
+- [ ] `/diagnostico` en verde (también Mistral y búsqueda web si las activaste)
 
 **¡Listo!** 🎉 Comparte tu URL y empieza a invitar a gente.
 

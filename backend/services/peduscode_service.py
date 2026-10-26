@@ -26,7 +26,16 @@ from typing import Awaitable, Callable
 import httpx
 
 from config import settings
-from services.groq_service import GroqError, ThinkFilter, groq_service
+from services.groq_service import (
+    GroqError,
+    ThinkFilter,
+    _mistral_reasoning,
+    groq_service,
+    mistral_messages,
+    provider_of,
+    split_chunks,
+    split_model,
+)
 
 logger = logging.getLogger("pedusia.code")
 
@@ -161,16 +170,19 @@ _SCHED_LOCK = asyncio.Lock()
 
 
 def _bucket(model: str) -> _TokenBucket:
+    """Cubo de tokens del modelo, con el límite por minuto de su proveedor (Groq o Mistral)."""
+    capacity = provider_of(model).tpm
     bucket = _BUCKETS.get(model)
-    if bucket is None or bucket.capacity != settings.GROQ_TPM_LIMIT:
-        bucket = _TokenBucket(settings.GROQ_TPM_LIMIT)
+    if bucket is None or bucket.capacity != capacity:
+        bucket = _TokenBucket(capacity)
         _BUCKETS[model] = bucket
     return bucket
 
 
 def _available(models: list[str]) -> list[str]:
+    """Modelos utilizables ahora: con clave de su proveedor y sin bloqueo temporal."""
     now = time.monotonic()
-    return [m for m in models if _UNAVAILABLE.get(m, 0) <= now]
+    return [m for m in models if provider_of(m).configured and _UNAVAILABLE.get(m, 0) <= now]
 
 
 def _mark_unavailable(model: str, seconds: float) -> None:
@@ -240,7 +252,11 @@ def _int_header(headers: httpx.Headers, name: str) -> int | None:
 
 
 def _model_extras(model: str, effort: str | None) -> dict:
-    """Parámetros opcionales según el modelo (si Groq los rechaza se reintenta sin ellos)."""
+    """Parámetros opcionales según el modelo (si el proveedor los rechaza se reintenta sin ellos)."""
+    provider, model = split_model(model)
+    if provider == "mistral":
+        # Sin razonamiento visible: los agentes deben devolver directamente el código
+        return {"reasoning_effort": "none"} if _mistral_reasoning(model) else {}
     if model.startswith("openai/gpt-oss"):
         return {"reasoning_effort": effort or "low"}
     if model.startswith("qwen/"):
@@ -264,13 +280,16 @@ async def _call_groq(
     effort: str | None = None,
     on_delta: Callable[[int], Awaitable[None]] | None = None,
 ) -> CallResult:
-    """Una llamada a Groq (con streaming si hay on_delta). Lanza _RateLimited o GroqError."""
+    """Una llamada al proveedor del modelo (con streaming si hay on_delta). Lanza _RateLimited o GroqError."""
     extras = _model_extras(model, effort)
     use_json = json_mode
+    provider = provider_of(model)
+    api_model = split_model(model)[1]
+    api_messages = mistral_messages(messages) if provider.name == "mistral" else messages
     for attempt in range(3):
         payload = {
-            "model": model,
-            "messages": messages,
+            "model": api_model,
+            "messages": api_messages,
             "max_tokens": max_tokens,
             "temperature": 0.3,
             "stream": on_delta is not None,
@@ -281,8 +300,8 @@ async def _call_groq(
         try:
             async with groq_service.client.stream(
                 "POST",
-                f"{settings.GROQ_BASE_URL}/chat/completions",
-                headers=groq_service.headers,
+                f"{provider.base_url}/chat/completions",
+                headers=provider.headers,
                 json=payload,
                 timeout=httpx.Timeout(180.0, connect=10.0),
             ) as response:
@@ -297,7 +316,7 @@ async def _call_groq(
                     raise _RateLimited(seconds if seconds is not None else 8.0, daily)
                 if response.status_code != 200:
                     error = await groq_service._error_from_response(response)  # noqa: SLF001
-                    if attempt < 2 and error.status_code == 400:
+                    if attempt < 2 and error.status_code in (400, 422):
                         text = f"{error.code} {error.message}".lower()
                         if extras and ("reasoning" in text or "property" in text or "parameter" in text):
                             extras = {}
@@ -310,7 +329,7 @@ async def _call_groq(
                 if on_delta is None:
                     data = json.loads(await response.aread())
                     choice = (data.get("choices") or [{}])[0]
-                    content = (choice.get("message") or {}).get("content") or ""
+                    content, _thinking = split_chunks((choice.get("message") or {}).get("content") or "")
                     usage = data.get("usage") or {}
                     think = ThinkFilter()
                     return CallResult(
@@ -344,6 +363,8 @@ async def _call_groq(
                     if choices[0].get("finish_reason"):
                         finish_reason = choices[0]["finish_reason"]
                     delta = (choices[0].get("delta") or {}).get("content")
+                    if isinstance(delta, list):
+                        delta = split_chunks(delta)[0]  # Mistral: solo la parte de texto
                     if delta:
                         text = think.feed(delta)
                         if text:
@@ -402,8 +423,19 @@ async def call_with_scheduler(
                 bucket.penalize(limited.seconds + 0.3, min(cost, bucket.capacity))
         except GroqError as error:
             last_error = error
-            if error.status_code == 401:
-                raise GroqError(401, "invalid_key", error.message, "La clave de Groq no es válida.") from error
+            if error.status_code in (401, 402):
+                current = provider_of(model)
+                others = [m for m in _available(models) if provider_of(m).name != current.name]
+                if not others:
+                    raise GroqError(
+                        401, "invalid_key", error.message, f"La clave de {current.label} no es válida."
+                    ) from error
+                # Clave inválida o sin saldo en este proveedor: usar los modelos de otro
+                logger.warning("PedusCode: %s rechazó la clave (%s)", current.label, error.status_code)
+                for other in models:
+                    if provider_of(other).name == current.name:
+                        _mark_unavailable(other, 900)
+                continue
             if error.model_unavailable:
                 logger.warning("PedusCode: modelo %s no disponible (%s)", model, error.message)
                 _mark_unavailable(model, 900)
